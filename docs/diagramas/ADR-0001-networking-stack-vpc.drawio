@@ -1,0 +1,196 @@
+<mxfile host="app.diagrams.net" agent="aws-architect-agent" version="24.7.17" type="device">
+  <diagram name="Arquitetura" id="adr-0001-arquitetura">
+    <mxGraphModel dx="1800" dy="900" background="#FFFFFF" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2300" pageHeight="850" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ===================== EXTERNO ===================== -->
+        <mxCell id="internet" value="Usu&#225;rio / Internet" style="ellipse;whiteSpace=wrap;html=1;fillColor=#F2F2F2;strokeColor=#545B64;fontColor=#1A1A1A;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="40" y="485" width="160" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== REDE (fora da VPC) ===================== -->
+        <mxCell id="igw" value="Internet Gateway&lt;br&gt;prd-networking-igw-sa-east-1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F2E8FF;strokeColor=#8C4FFF;fontColor=#1A1A1A;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="260" y="470" width="170" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== VPC (container) ===================== -->
+        <mxCell id="vpc_container" value="VPC 10.0.0.0/24 &#8212; prd-networking-vpc-sa-east-1 (ambiente &#250;nico, prd)" style="rounded=1;whiteSpace=wrap;html=1;verticalAlign=top;align=center;fontColor=#1A1A1A;fontSize=13;fontStyle=1;fillColor=#FFFFFF;strokeColor=#8C4FFF;strokeWidth=2;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="520" y="40" width="1360" height="730" as="geometry" />
+        </mxCell>
+
+        <mxCell id="az1_container" value="AZ sa-east-1a" style="rounded=1;whiteSpace=wrap;html=1;verticalAlign=top;align=center;fontColor=#1A1A1A;fontSize=12;fontStyle=1;fillColor=#FFFFFF;strokeColor=#8C4FFF;strokeWidth=2;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="550" y="90" width="620" height="360" as="geometry" />
+        </mxCell>
+
+        <mxCell id="pub1" value="Subnet p&#250;blica AZ1&lt;br&gt;prd-networking-public-sa-east-1a&lt;br&gt;10.0.0.0/26" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F2E8FF;strokeColor=#8C4FFF;fontColor=#1A1A1A;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="590" y="140" width="230" height="55" as="geometry" />
+        </mxCell>
+
+        <mxCell id="eip1" value="Elastic IP NAT (&#250;nico)&lt;br&gt;prd-networking-nat-eip-sa-east-1a" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F2E8FF;strokeColor=#8C4FFF;fontColor=#1A1A1A;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="860" y="140" width="270" height="55" as="geometry" />
+        </mxCell>
+
+        <mxCell id="nat1" value="NAT Gateway (&#250;nico &#8212; SPOF aceito em prd)&lt;br&gt;prd-networking-nat-sa-east-1a" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F2E8FF;strokeColor=#8C4FFF;fontColor=#1A1A1A;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="590" y="225" width="230" height="55" as="geometry" />
+        </mxCell>
+
+        <mxCell id="priv1" value="Subnet privada AZ1&lt;br&gt;prd-networking-private-sa-east-1a&lt;br&gt;10.0.0.128/26" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F2E8FF;strokeColor=#8C4FFF;fontColor=#1A1A1A;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="590" y="310" width="230" height="55" as="geometry" />
+        </mxCell>
+
+        <mxCell id="az2_container" value="AZ sa-east-1b" style="rounded=1;whiteSpace=wrap;html=1;verticalAlign=top;align=center;fontColor=#1A1A1A;fontSize=12;fontStyle=1;fillColor=#FFFFFF;strokeColor=#8C4FFF;strokeWidth=2;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="1230" y="90" width="620" height="360" as="geometry" />
+        </mxCell>
+
+        <mxCell id="pub2" value="Subnet p&#250;blica AZ2&lt;br&gt;prd-networking-public-sa-east-1b&lt;br&gt;10.0.0.64/26" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F2E8FF;strokeColor=#8C4FFF;fontColor=#1A1A1A;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1270" y="140" width="230" height="55" as="geometry" />
+        </mxCell>
+
+        <mxCell id="priv2" value="Subnet privada AZ2&lt;br&gt;prd-networking-private-sa-east-1b&lt;br&gt;10.0.0.192/26" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F2E8FF;strokeColor=#8C4FFF;fontColor=#1A1A1A;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1270" y="310" width="230" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== ROUTE TABLES ===================== -->
+        <mxCell id="rt_pub" value="Tabela de rotas p&#250;blica&lt;br&gt;prd-networking-rt-public-sa-east-1&lt;br&gt;(compartilhada pelas 2 subnets p&#250;blicas)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F2E8FF;strokeColor=#8C4FFF;fontColor=#1A1A1A;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="590" y="470" width="230" height="55" as="geometry" />
+        </mxCell>
+
+        <mxCell id="rt_priv" value="Tabela de rotas privada&lt;br&gt;prd-networking-rt-private-sa-east-1&lt;br&gt;(1 compartilhada &#8212; NAT &#250;nico, SPOF aceito em prd)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F2E8FF;strokeColor=#8C4FFF;fontColor=#1A1A1A;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1270" y="470" width="230" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== SEGURANCA ===================== -->
+        <mxCell id="default_sg" value="Default Security Group&lt;br&gt;prd-networking-default-sg&lt;br&gt;(sem regras de entrada/sa&#237;da)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDE8EA;strokeColor=#DD344C;fontColor=#1A1A1A;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="590" y="545" width="230" height="55" as="geometry" />
+        </mxCell>
+
+        <mxCell id="default_nacl" value="Default Network ACL&lt;br&gt;prd-networking-default-nacl&lt;br&gt;(allow-all padr&#227;o)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDE8EA;strokeColor=#DD344C;fontColor=#1A1A1A;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1270" y="545" width="230" height="55" as="geometry" />
+        </mxCell>
+
+        <mxCell id="flowlog" value="VPC Flow Log&lt;br&gt;prd-networking-flow-log" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDE8EA;strokeColor=#DD344C;fontColor=#1A1A1A;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="590" y="620" width="230" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== REDE (data source, nao provisionado) ===================== -->
+        <mxCell id="az_datasource" value="data.aws_availability_zones&lt;br&gt;(resolu&#231;&#227;o din&#226;mica de AZs,&lt;br&gt;n&#227;o provisionado)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F2E8FF;strokeColor=#8C4FFF;fontColor=#1A1A1A;fontSize=11;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="590" y="695" width="230" height="55" as="geometry" />
+        </mxCell>
+
+        <mxCell id="cidr_note" value="CIDR /24 100% alocado nas 4 sub-redes /26&lt;br&gt;(sem bloco reservado &#8212; expans&#227;o futura&lt;br&gt;exige CIDR IPv4 secund&#225;rio)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F2E8FF;strokeColor=#8C4FFF;fontColor=#1A1A1A;fontSize=11;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="1270" y="620" width="230" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== SEGURANCA (fora da VPC) ===================== -->
+        <mxCell id="loggroup" value="CloudWatch Log Group&lt;br&gt;/aws/vpc-flow-log/prd-networking&lt;br&gt;(reten&#231;&#227;o parametriz&#225;vel)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDE8EA;strokeColor=#DD344C;fontColor=#1A1A1A;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1950" y="280" width="260" height="65" as="geometry" />
+        </mxCell>
+
+        <mxCell id="iamrole" value="IAM Role Flow Logs&lt;br&gt;prd-networking-flow-logs-role&lt;br&gt;(least privilege)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDE8EA;strokeColor=#DD344C;fontColor=#1A1A1A;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1950" y="410" width="260" height="65" as="geometry" />
+        </mxCell>
+
+        <!-- ===================== ARESTAS ANIMADAS (fluxo de trafego/dados ativo) ===================== -->
+        <mxCell id="e_internet_igw" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;startArrow=block;endArrow=block;fontColor=#1A1A1A;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="internet" target="igw">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_igw_pub1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;endArrow=block;fontColor=#1A1A1A;exitX=0.353;exitY=0;entryX=0.5;entryY=0;" edge="1" parent="1" source="igw" target="pub1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="320" y="65" />
+              <mxPoint x="705" y="65" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_igw_pub2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;endArrow=block;fontColor=#1A1A1A;exitX=0.647;exitY=0;entryX=0.5;entryY=0;" edge="1" parent="1" source="igw" target="pub2">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="370" y="65" />
+              <mxPoint x="1385" y="65" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_pub1_nat1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;startArrow=block;endArrow=block;fontColor=#1A1A1A;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="pub1" target="nat1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_nat1_priv1" value="rota default &#8594; NAT &#250;nico (SPOF aceito em prd)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;startArrow=block;endArrow=block;fontColor=#1A1A1A;fontSize=10;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="nat1" target="priv1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_nat1_priv2" value="rota default &#8594; NAT &#250;nico (cross-AZ, SPOF aceito em prd)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;startArrow=block;endArrow=block;fontColor=#1A1A1A;fontSize=10;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="nat1" target="priv2">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="705" y="295" />
+              <mxPoint x="1385" y="295" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_flowlog_loggroup" value="entrega de logs" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;endArrow=block;fontColor=#1A1A1A;fontSize=10;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;entryX=0;entryY=0.5;" edge="1" parent="1" source="flowlog" target="loggroup">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="705" y="680" />
+              <mxPoint x="1910" y="680" />
+              <mxPoint x="1910" y="312" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ===================== ARESTAS ESTRUTURAIS (sem animacao) ===================== -->
+        <mxCell id="s_pub1_rtpub" value="associa&#231;&#227;o" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#757575;strokeWidth=1;dashed=1;endArrow=none;fontColor=#1A1A1A;fontSize=11;labelBackgroundColor=#ffffff;exitX=0;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="pub1" target="rt_pub">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="570" y="167" />
+              <mxPoint x="570" y="497" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="s_pub2_rtpub" value="associa&#231;&#227;o" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#757575;strokeWidth=1;dashed=1;endArrow=none;fontColor=#1A1A1A;fontSize=11;labelBackgroundColor=#ffffff;exitX=0;exitY=0.5;entryX=0.8;entryY=0;" edge="1" parent="1" source="pub2" target="rt_pub">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1250" y="167" />
+              <mxPoint x="1250" y="460" />
+              <mxPoint x="774" y="460" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="s_priv1_rtpriv" value="associa&#231;&#227;o" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#757575;strokeWidth=1;dashed=1;endArrow=none;fontColor=#1A1A1A;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="priv1" target="rt_priv">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="830" y="337" />
+              <mxPoint x="830" y="497" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="s_priv2_rtpriv" value="associa&#231;&#227;o" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#757575;strokeWidth=1;dashed=1;endArrow=none;fontColor=#1A1A1A;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="priv2" target="rt_priv">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="s_eip1_nat1" value="associa&#231;&#227;o" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#757575;strokeWidth=1;dashed=1;endArrow=none;fontColor=#1A1A1A;fontSize=11;labelBackgroundColor=#ffffff;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="1" source="eip1" target="nat1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="s_iamrole_flowlog" value="assume role" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#757575;strokeWidth=1;dashed=1;endArrow=block;fontColor=#1A1A1A;fontSize=11;labelBackgroundColor=#ffffff;exitX=0;exitY=0.5;entryX=1;entryY=1;" edge="1" parent="1" source="iamrole" target="flowlog">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1895" y="442" />
+              <mxPoint x="1895" y="692" />
+              <mxPoint x="820" y="692" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="s_rtpub_igw" value="rota default 0.0.0.0/0" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#757575;strokeWidth=1;dashed=1;endArrow=block;fontColor=#1A1A1A;fontSize=11;labelBackgroundColor=#ffffff;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="1" source="rt_pub" target="igw">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="s_rtpriv_nat1" value="rota default 0.0.0.0/0" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#757575;strokeWidth=1;dashed=1;endArrow=block;fontColor=#1A1A1A;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.25;exitY=0;entryX=1;entryY=0.8;" edge="1" parent="1" source="rt_priv" target="nat1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1327" y="440" />
+              <mxPoint x="850" y="440" />
+              <mxPoint x="850" y="269" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

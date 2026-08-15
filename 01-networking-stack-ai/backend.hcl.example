@@ -1,0 +1,15 @@
+# Exemplo de arquivo de configuracao parcial do backend S3 (ADR-0001, backend.tf).
+# Copie para backend.hcl (unico arquivo, sem sufixo de ambiente, a partir da
+# Revisao 5 do ADR-0001 — stack de ambiente unico, "prd") e ajuste os
+# valores reais antes de rodar `terraform init -backend-config=backend.hcl`.
+#
+# NAO versionar o arquivo backend.hcl real se ele contiver nomes de bucket
+# especificos de conta que nao devam ser publicos; ajuste conforme a
+# politica do time. Este .example nao contem valores reais.
+#
+# Pre-requisito: o bucket abaixo deve existir previamente (fora do escopo
+# desta stack — ver Premissa 8 do ADR-0001), com versioning e SSE habilitados.
+
+bucket = "SEU_BUCKET_DE_STATE_AQUI"
+key    = "01-networking-stack-ai/prd/terraform.tfstate"
+region = "sa-east-1"

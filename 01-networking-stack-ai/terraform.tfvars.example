@@ -1,0 +1,54 @@
+# Exemplo de terraform.tfvars (ADR-0001, Secao 13.2).
+# Copie para terraform.tfvars, na raiz da stack, e ajuste os valores.
+# NAO commitar o .tfvars real se ele contiver dados especificos sensiveis
+# da organizacao (Owner/CostCenter reais, por exemplo).
+#
+# A partir da Revisao 5 do ADR-0001 (Secao 4, decisao D2 / Secao 13.1 passo
+# 7), esta stack suporta um unico ambiente ("prd") — nao ha mais "environment"
+# como variavel de input (fixo em locals.tf) nem arquivos por ambiente em
+# envs/*.tfvars.
+#
+# Estrutura de variaveis agrupadas por dominio, conforme
+# .claude/rules/terraform-naming-conventions.md (Secao 4).
+
+aws_region   = "sa-east-1"
+project_name = "networking"
+
+vpc = {
+  cidr = "10.0.0.0/24"
+  # Lista vazia -> a stack resolve dinamicamente as 2 primeiras AZs
+  # disponiveis na regiao (ver locals.tf). Informe explicitamente para
+  # fixar AZs (ex.: ["sa-east-1a", "sa-east-1b"]).
+  availability_zones = []
+}
+
+# Configuracao fixa e definitiva do unico ambiente desta stack (prd) a
+# partir da Revisao 5 do ADR-0001: NAT Gateway unico compartilhado —
+# decisao de negocio explicita do solicitante, priorizando custo sobre a
+# HA que este ADR recomendava para producao ate a Revisao 4 (Premissa 14,
+# Secao 4 decisao D1, Secao 11 do ADR-0001).
+nat_gateway = {
+  enabled                = true
+  single_nat_gateway     = true
+  one_nat_gateway_per_az = false
+}
+
+# Nao utilizado nesta revisao — reversao para HA exige decisao consciente,
+# ver Secao 11 do ADR-0001. Caminho de reversao preservado no codigo
+# (locals.tf/vpc.nat-gateway.tf/vpc.route-tables.tf) sem necessidade de
+# mudanca de arquitetura.
+# nat_gateway = {
+#   enabled                = true
+#   single_nat_gateway     = false
+#   one_nat_gateway_per_az = true
+# }
+
+flow_logs = {
+  enabled        = true
+  retention_days = 30
+}
+
+tags = {
+  Owner      = "AJUSTAR-time-responsavel"
+  CostCenter = "AJUSTAR-centro-de-custo"
+}
