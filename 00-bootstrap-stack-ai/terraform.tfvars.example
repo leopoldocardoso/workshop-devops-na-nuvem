@@ -1,0 +1,35 @@
+# Exemplo de terraform.tfvars (ADR-0002, Secao 13.2).
+# Copie para terraform.tfvars, na raiz da stack, e ajuste os valores.
+# NAO commitar o .tfvars real se ele contiver dados especificos sensiveis
+# da organizacao (Owner/CostCenter reais, por exemplo).
+#
+# Sem "environment" como variavel de input — ambiente unico do projeto
+# ("prd"), fixo em locals.tf (ADR-0002 Premissa 1).
+#
+# Estrutura de variaveis agrupadas por dominio, conforme
+# .claude/rules/terraform-naming-conventions.md (Secao 4).
+
+aws_region   = "sa-east-1"
+project_name = "bootstrap"
+
+# force_destroy DEVE permanecer false (ADR-0002 Secao 11) — este bucket
+# guarda o .tfstate de todas as stacks consumidoras.
+#
+# Valores sugeridos pelo ADR (Secao 13.2):
+#   noncurrent_version_expiration_days = 90  -> expira versoes nao-atuais
+#     apos 90 dias...
+#   noncurrent_version_retain_count    = 30  -> ...exceto as 30 versoes
+#     nao-atuais mais recentes, retidas independentemente da idade.
+#   abort_incomplete_multipart_upload_days = 7 -> aborta uploads multipart
+#     incompletos apos 7 dias.
+state_bucket = {
+  force_destroy                          = false
+  noncurrent_version_expiration_days     = 90
+  noncurrent_version_retain_count        = 30
+  abort_incomplete_multipart_upload_days = 7
+}
+
+tags = {
+  Owner      = "AJUSTAR-time-responsavel"
+  CostCenter = "AJUSTAR-centro-de-custo"
+}
