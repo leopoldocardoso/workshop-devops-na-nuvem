@@ -1,6 +1,6 @@
 # ADR-0003: Stack de Cluster EKS (`03-eks-stack-ai`)
 
-- **Status:** Proposed
+- **Status:** Approved
 - **Data:** 2026-08-28
 - **Autor:** Planner Agent
 - **Supersedes:** N/A
