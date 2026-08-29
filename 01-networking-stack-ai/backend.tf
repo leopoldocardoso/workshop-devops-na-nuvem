@@ -18,10 +18,18 @@
 # Terraform CLI >= 1.10.0; o floor efetivo desta stack e >= 1.15.8, ver
 # versions.tf), eliminando a necessidade de uma tabela DynamoDB dedicada
 # para locking.
+#
+# `encrypt = true` faz o backend enviar o header
+# `x-amz-server-side-encryption: AES256` em todo PutObject (state e lock
+# file). Obrigatorio: a bucket policy do bucket de backend (ADR-0002,
+# statement "DenyUnencryptedObjectUpload") nega qualquer upload sem esse
+# header — sem `encrypt = true` aqui, nem o proprio `terraform init
+# -migrate-state` consegue escrever o state.
 ############################################################################
 
 terraform {
   backend "s3" {
     use_lockfile = true
+    encrypt      = true
   }
 }

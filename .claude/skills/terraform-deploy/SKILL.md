@@ -8,8 +8,9 @@ description: >
   ou rodar uma stack (e.g. "deploy 01-networking-stack-ai", "aplica todas
   as stacks"). Aplica automaticamente, sem pausa manual, contra qualquer
   stack com backend local (override.tf) — inclusive em prd. Stacks com
-  backend remoto real (backend.hcl) continuam SEMPRE ignoradas por este
-  driver, em qualquer circunstância.
+  backend remoto real (backend.hcl) são ignoradas por padrão; a flag
+  --allow-remote-apply libera o mesmo pipeline também para elas, mas só
+  quando pedida explicitamente na chamada.
 ---
 
 # terraform-deploy
@@ -26,9 +27,11 @@ Para cada stack alvo com backend local (`override.tf` presente):
 `terraform fmt -check` → `init` → `validate` → `plan` → `apply
 -auto-approve` → gera `docs/deployments/<stack>.md` com o resultado.
 **Sem pausa manual entre plan e apply.** Stacks com backend remoto real
-(`backend.hcl` presente) são sempre ignoradas — nunca sofrem
-fmt/init/validate/plan/apply por este driver, em nenhuma circunstância
-(ver Gotchas).
+(`backend.hcl` presente) são ignoradas por padrão — nunca sofrem
+fmt/init/validate/plan/apply por este driver, a menos que
+`--allow-remote-apply` seja passado explicitamente nesta chamada (ver
+Gotchas), caso em que sofrem o mesmo pipeline completo, com
+`terraform init -backend-config=backend.hcl` injetado automaticamente.
 
 ## Como rodar
 
@@ -38,18 +41,24 @@ fmt/init/validate/plan/apply por este driver, em nenhuma circunstância
 
 # 2) execução real (fmt/init/validate/plan/apply/docs) — credenciais AWS reais,
 #    cria/modifica infraestrutura de verdade e cobrável, sem confirmação interativa
-.claude/skills/terraform-deploy/deploy.sh                        # todas as stacks
+.claude/skills/terraform-deploy/deploy.sh                        # todas as stacks (backend local)
 .claude/skills/terraform-deploy/deploy.sh 01-networking-stack-ai  # uma stack específica
+
+# 3) idem, mas também aplica contra stacks com backend remoto real (backend.hcl) —
+#    exige autorização explícita do operador para ESTA chamada especificamente
+.claude/skills/terraform-deploy/deploy.sh --allow-remote-apply 01-networking-stack-ai
 ```
 
-Saída, por stack: um banner `[BACKEND: LOCAL/override.tf]`, o resultado
-de cada etapa, o print do plan, o log do apply, e por fim o caminho do
-arquivo de documentação gerado em `docs/deployments/`.
+Saída, por stack: um banner `[BACKEND: LOCAL/override.tf]` ou
+`[BACKEND: REMOTE-S3/backend.hcl]` (só aparece com `--allow-remote-apply`),
+o resultado de cada etapa, o print do plan, o log do apply, e por fim o
+caminho do arquivo de documentação gerado em `docs/deployments/`.
 
 Códigos de saída: `0` = todas as stacks alvo aplicadas, sem mudanças, ou
-ignoradas (backend remoto) — nenhuma falhou; `1` = alguma stack falhou em
-fmt/init/validate/plan/apply; `2` = erro de uso (terraform ausente, stack
-inexistente/fora do padrão `NN-*-stack*/`, nenhuma stack encontrada).
+ignoradas (backend remoto, sem `--allow-remote-apply`) — nenhuma falhou;
+`1` = alguma stack falhou em fmt/init/validate/plan/apply; `2` = erro de
+uso (terraform ausente, stack inexistente/fora do padrão `NN-*-stack*/`,
+nenhuma stack encontrada).
 
 ## Documentação gerada
 
@@ -80,9 +89,9 @@ não é regenerada.
 
 ## O que este skill explicitamente NÃO faz
 
-- Não roda nada contra stack com backend remoto real (`backend.hcl`) —
-  fmt/init/validate/plan/apply, todos pulados. Essa proteção não foi
-  alterada por este ajuste.
+- Não roda nada contra stack com backend remoto real (`backend.hcl`) sem
+  `--allow-remote-apply` — fmt/init/validate/plan/apply, todos pulados
+  por padrão.
 - Não cria o bucket S3 do backend.
 - Não ordena dependências entre stacks (ex.: uma futura `02-compute`
   consumindo outputs de `01-networking`) nem roda em paralelo.
@@ -116,13 +125,15 @@ não é regenerada.
   testar algo". Essa é a lição direta do incidente registrado na
   memória do projeto, que continua válida independente do auto-approve
   estar ligado.
-- **Backend local hoje, S3 real amanhã.** `01-networking-stack-ai` usa
-  hoje um `override.tf` (gitignored) forçando backend `local`, porque o
-  bucket S3 real ainda não existe. O driver detecta e rotula isso em
-  toda execução. Quando a stack migrar para `backend.hcl` (backend
-  remoto real), ela passa automaticamente a ser **ignorada** por este
-  driver — apply automático nunca roda contra backend remoto,
-  independente desta mudança.
+- **Backend local ou S3 real — `--allow-remote-apply` decide.**
+  `01-networking-stack-ai` migrou para backend S3 real (`backend.hcl`)
+  em 2026-08-28 (bucket criado por `00-bootstrap-stack-ai`/ADR-0002). O
+  driver detecta e rotula o backend em toda execução; por padrão,
+  qualquer stack com `backend.hcl` continua **ignorada** — apply
+  automático só roda contra ela se `--allow-remote-apply` for passado
+  explicitamente nesta chamada. Essa flag não deve ser adicionada por um
+  agente por conta própria "para destravar" um deploy; exige autorização
+  explícita do operador por chamada, igual ao restante do driver.
 - **Plan files ficam fora do repo; docs ficam dentro.** Os `tfplan`
   binários continuam sendo escritos em `mktemp -d`, fora da árvore do
   repositório (não versionados). Já os arquivos de documentação gerados
@@ -132,10 +143,12 @@ não é regenerada.
 
 ## Como foi verificado
 
-`--help` e `--dry-run` (com e sem stack explícita) foram rodados após
-este ajuste, confirmando que o passo 7 (geração de documentação) aparece
-no plano de execução impresso. A execução real completa
-(fmt/init/validate/plan/apply/docs) com credenciais AWS reais **não foi
-disparada nesta sessão** — precisa de autorização explícita do operador
-por chamada, conforme Gotchas acima, e fica para uma próxima invocação
-deliberada do driver.
+`--help` e `--dry-run` (com e sem `--allow-remote-apply`) foram rodados
+após a adição dessa flag (2026-08-28), confirmando que:
+(a) sem a flag, `01-networking-stack-ai` (já em `backend.hcl`) continua
+listada como ignorada; (b) com a flag, ela aparece com o pipeline
+completo, incluindo `terraform init -backend-config=backend.hcl`
+injetado automaticamente no passo 2. A execução real de
+`--allow-remote-apply` (fmt/init/validate/plan/apply/docs contra backend
+remoto) **não foi disparada nesta sessão** — precisa de autorização
+explícita do operador por chamada, conforme Gotchas acima.
