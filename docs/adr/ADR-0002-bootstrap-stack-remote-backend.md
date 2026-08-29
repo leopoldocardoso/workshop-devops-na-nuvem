@@ -1,6 +1,6 @@
 # ADR-0002: Stack de Bootstrap — Bucket S3 para Backend Remoto do Terraform
 
-- **Status:** Proposed
+- **Status:** Aceito
 - **Data:** 2026-08-01
 - **Autor:** Planner Agent
 - **Supersedes:** N/A

@@ -1,0 +1,135 @@
+<mxfile host="app.diagrams.net" agent="aws-architect-agent" version="24.7.17" type="device">
+  <diagram name="Arquitetura" id="adr-0003-eks-stack-arquitetura">
+    <mxGraphModel dx="1700" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1300" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Externo: DevOps Engineer / CI -->
+        <mxCell id="engineer" value="DevOps Engineer / CI&#10;(terraform apply + kubectl,&#10;via CIDR autorizado)" style="ellipse;whiteSpace=wrap;html=1;fillColor=#F2F2F2;strokeColor=#545B64;fontColor=#1A1A1A;" vertex="1" parent="1">
+          <mxGeometry x="40" y="500" width="180" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- Grupo: 01-networking-stack-ai (referenciado, nao provisionado por este ADR) -->
+        <mxCell id="net_group" value="01-networking-stack-ai (referenciada via data sources — NAO provisionada por este ADR)" style="rounded=1;whiteSpace=wrap;html=1;verticalAlign=top;fillColor=#F2E8FF;strokeColor=#8C4FFF;fontColor=#1A1A1A;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="300" y="80" width="440" height="360" as="geometry" />
+        </mxCell>
+
+        <mxCell id="vpc" value="VPC 10.0.0.0/24&#10;prd-networking-vpc-sa-east-1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F2E8FF;strokeColor=#8C4FFF;fontColor=#1A1A1A;" vertex="1" parent="1">
+          <mxGeometry x="330" y="120" width="380" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="pub_sub" value="2x Subnet publica&#10;(Tier=public)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F2E8FF;strokeColor=#8C4FFF;fontColor=#1A1A1A;" vertex="1" parent="1">
+          <mxGeometry x="330" y="200" width="170" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="priv_sub" value="2x Subnet privada&#10;(Tier=private)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F2E8FF;strokeColor=#8C4FFF;fontColor=#1A1A1A;" vertex="1" parent="1">
+          <mxGeometry x="540" y="200" width="170" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="nat" value="NAT Gateway unico&#10;(existente)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F2E8FF;strokeColor=#8C4FFF;fontColor=#1A1A1A;" vertex="1" parent="1">
+          <mxGeometry x="540" y="310" width="170" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Grupo: 03-eks-stack-ai -->
+        <mxCell id="eks_group" value="03-eks-stack-ai" style="rounded=1;whiteSpace=wrap;html=1;verticalAlign=top;fillColor=#FFFFFF;strokeColor=#545B64;fontColor=#1A1A1A;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="820" y="40" width="820" height="620" as="geometry" />
+        </mxCell>
+
+        <!-- IAM Roles (Seguranca) -->
+        <mxCell id="cluster_role" value="IAM Role — Cluster&#10;prd-eks-cluster-role-sa-east-1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDE8EA;strokeColor=#DD344C;fontColor=#1A1A1A;" vertex="1" parent="1">
+          <mxGeometry x="860" y="90" width="230" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="node_role" value="IAM Role — Node Group&#10;prd-eks-node-role-sa-east-1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDE8EA;strokeColor=#DD344C;fontColor=#1A1A1A;" vertex="1" parent="1">
+          <mxGeometry x="860" y="560" width="230" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="kms" value="KMS CMK&#10;prd-eks-secrets-sa-east-1&#10;(envelope encryption Secrets)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDE8EA;strokeColor=#DD344C;fontColor=#1A1A1A;" vertex="1" parent="1">
+          <mxGeometry x="1160" y="90" width="230" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="oidc" value="IAM OIDC Provider&#10;(fundacao IRSA)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDE8EA;strokeColor=#DD344C;fontColor=#1A1A1A;" vertex="1" parent="1">
+          <mxGeometry x="1460" y="90" width="150" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Log Group (Storage/observabilidade) -->
+        <mxCell id="log_group" value="CloudWatch Log Group&#10;/aws/eks/prd-eks-sa-east-1/cluster" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EAF7E0;strokeColor=#7AA116;fontColor=#1A1A1A;" vertex="1" parent="1">
+          <mxGeometry x="1460" y="330" width="150" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- Compute: EKS Cluster e Node Group -->
+        <mxCell id="cluster" value="EKS Cluster (control plane)&#10;prd-eks-sa-east-1 — k8s 1.34" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF1E0;strokeColor=#ED7100;fontColor=#1A1A1A;" vertex="1" parent="1">
+          <mxGeometry x="1120" y="330" width="260" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="node_group" value="EKS Managed Node Group&#10;prd-eks-ng-sa-east-1&#10;2x t3.medium ON_DEMAND" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF1E0;strokeColor=#ED7100;fontColor=#1A1A1A;" vertex="1" parent="1">
+          <mxGeometry x="1120" y="560" width="260" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- Arestas de fluxo de dados/tráfego ativo (animadas) -->
+        <mxCell id="e_eng_cluster_kubectl" value="kubectl / API (endpoint publico restrito por CIDR)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;fontColor=#1A1A1A;" edge="1" parent="1" source="engineer" target="cluster">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_eng_cluster_apply" value="terraform apply" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;fontColor=#1A1A1A;" edge="1" parent="1" source="engineer" target="cluster">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="130" y="440" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="e_clusterrole_cluster" value="AssumeRole (eks.amazonaws.com)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#DD344C;strokeWidth=2;flowAnimation=1;fontColor=#1A1A1A;" edge="1" parent="1" source="cluster_role" target="cluster">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_noderole_nodegroup" value="AssumeRole (ec2.amazonaws.com)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#DD344C;strokeWidth=2;flowAnimation=1;fontColor=#1A1A1A;" edge="1" parent="1" source="node_role" target="node_group">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_kms_cluster" value="encryption_config (secrets)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#DD344C;strokeWidth=2;flowAnimation=1;fontColor=#1A1A1A;" edge="1" parent="1" source="kms" target="cluster">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_cluster_log" value="enabled_cluster_log_types&#10;(api/audit/authenticator/&#10;controllerManager/scheduler)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;fontColor=#1A1A1A;" edge="1" parent="1" source="cluster" target="log_group">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_cluster_oidc" value="issuer OIDC" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;fontColor=#1A1A1A;" edge="1" parent="1" source="cluster" target="oidc">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_cluster_pubsub" value="vpc_config.subnet_ids&#10;(ENIs cross-account)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;fontColor=#1A1A1A;" edge="1" parent="1" source="cluster" target="pub_sub">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_cluster_privsub" value="vpc_config.subnet_ids&#10;(ENIs cross-account)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;fontColor=#1A1A1A;" edge="1" parent="1" source="cluster" target="priv_sub">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_nodegroup_cluster" value="kubelet &lt;-&gt; control plane" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;fontColor=#1A1A1A;" edge="1" parent="1" source="node_group" target="cluster">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_nodegroup_privsub" value="provisionado em" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;fontColor=#1A1A1A;" edge="1" parent="1" source="node_group" target="priv_sub">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_privsub_nat" value="egress via NAT unico (SPOF aceito em prd — ADR-0001)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;fontColor=#1A1A1A;" edge="1" parent="1" source="priv_sub" target="nat">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Arestas estruturais (associacao/contencao, sem animacao) -->
+        <mxCell id="e_vpc_pubsub" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#8C4FFF;strokeWidth=1;dashed=1;fontColor=#1A1A1A;endArrow=none;" edge="1" parent="1" source="vpc" target="pub_sub">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_vpc_privsub" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#8C4FFF;strokeWidth=1;dashed=1;fontColor=#1A1A1A;endArrow=none;" edge="1" parent="1" source="vpc" target="priv_sub">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
