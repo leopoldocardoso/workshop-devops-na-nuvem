@@ -1,0 +1,17 @@
+.terraform/
+# .terraform.lock.hcl NAO ignorado: esta e uma stack raiz (deployavel), nao
+# um modulo reutilizavel — o lock file deve ser versionado para garantir
+# reproducibilidade da versao exata do provider entre execucoes/CI.
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+*.hcl
+!*.hcl.example
+!.terraform.lock.hcl

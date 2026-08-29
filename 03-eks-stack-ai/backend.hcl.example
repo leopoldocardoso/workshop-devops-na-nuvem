@@ -1,0 +1,12 @@
+# Exemplo de arquivo de configuracao parcial do backend S3 (ADR-0003,
+# backend.tf). Copie para backend.hcl (gitignored) e ajuste os valores
+# reais SOMENTE quando esta stack for migrada do backend local
+# (override.tf) para o backend S3 do ADR-0002 — tarefa subsequente e
+# separada, fora do escopo desta implementacao (ADR-0003 Secao 14).
+#
+# Pre-requisito: o bucket abaixo deve existir previamente
+# (00-bootstrap-stack-ai, ADR-0002), com versioning e SSE habilitados.
+
+bucket = "SEU_BUCKET_DE_STATE_AQUI"
+key    = "03-eks-stack-ai/prd/terraform.tfstate"
+region = "sa-east-1"
