@@ -5,7 +5,7 @@
 - **Autor:** Planner Agent
 - **Supersedes:** N/A
 - **Ambiente:** `prd` (ambiente único — dev/hml removidos nesta revisão; ver Seção 1 e Premissa 1)
-- **Região AWS:** sa-east-1 (São Paulo) — assumida, ver Seção 3
+- **Região AWS:** us-east-1 (N. Virginia) — região padrão do projeto para novos ADRs a partir de 2026-08-30; aplicada retroativamente a esta stack na Revisão 6 (ver Seção 3 e histórico de revisões abaixo)
 - **Histórico de revisões:**
   - `2026-07-18` — Versão inicial: decisão de provisionar a VPC via módulo comunitário Terraform (`terraform-aws-modules/vpc/aws`).
   - `2026-07-18` — Revisão 1: decisão alterada para uso exclusivo de recursos nativos do provider `hashicorp/aws`, sem módulos de terceiros/comunidade (exigência explícita do solicitante).
@@ -13,6 +13,7 @@
   - `2026-07-19` — Revisão 3 (aditiva/documentação): adicionado o diagrama editável `.drawio` equivalente ao diagrama Mermaid da Seção 6.1, com as arestas de fluxo de tráfego/dados ativo animadas (`flowAnimation=1`), em `docs/diagramas/ADR-0001-networking-stack-vpc.drawio` — requisito de artefato introduzido posteriormente ao registro original deste ADR. Nenhuma decisão arquitetural, recurso, CIDR ou valor deste documento foi alterado.
   - `2026-07-25` — Revisão 4 (refactor de endereçamento IP): CIDR da VPC alterado de `192.168.1.0/24` para `10.0.0.0/24`. Plano de sub-redes recalculado de 4× `/27` (usando apenas metade do `/24`, com a outra metade reservada) para 4× `/26` (2 públicas + 2 privadas), ocupando 100% do CIDR da VPC, sem espaço reservado. Estratégia de NAT Gateway único (compartilhado, `single_nat_gateway = true`) confirmada, sem alteração — já era o default `dev`/`hml` desde a versão original. Corrigido, junto com o solicitante, um typo de digitação (`/36` → `/26`) na segunda sub-rede privada, mantendo consistência com as demais 3 sub-redes.
   - `2026-07-25` — **Revisão 5 (redução de escopo — ambiente único `prd`):** a stack deixa de suportar múltiplos ambientes (`dev`/`hml`/`prd`) e passa a ter **um único ambiente-alvo: `prd`**. Os arquivos `envs/dev.tfvars` e `envs/hml.tfvars` são removidos; o único arquivo de valores remanescente é promovido de `envs/prd.tfvars` para `terraform.tfvars` na raiz da stack (o diretório `envs/` deixa de existir). A variável `environment` é removida (deixa de ser um input Terraform livre) e passa a ser um `local` fixo (`"prd"`) — um objeto `variable` que só aceita um único valor válido não agrega parametrização real (ver Seção 4, decisão D2). **Decisão de negócio explícita e consciente do solicitante, confirmada em duas rodadas de pergunta nesta sessão:** a estratégia de NAT Gateway de `prd` muda de HA completa (1 NAT Gateway por AZ, 2 no total — recomendação original deste ADR, mantida da Revisão 1 até a Revisão 4) para **NAT Gateway único** — a mesma configuração antes reservada a `dev`/`hml`. Isso é uma reversão consciente da recomendação de confiabilidade que este ADR fazia para produção, priorizando custo; o trade-off (ponto único de falha em produção) é tratado explicitamente na Seção 11, não removido ou suavizado do documento. Ver Seção 1 para a análise in-place vs. ADR sucessor, e Seção 13 para o diff de implementação completo.
+  - `2026-08-30` — **Revisão 6 (mudança de região — `sa-east-1` → `us-east-1`):** a região primária desta stack é alterada de `sa-east-1` (São Paulo) para `us-east-1` (N. Virginia), em conformidade com a nova região padrão do projeto para todo ADR a partir de 2026-08-30 (`CLAUDE.md`), aplicada retroativamente a este documento a pedido explícito do solicitante — **não** é uma reavaliação arquitetural, apenas a adoção do novo padrão de região do repositório. Alterado em todo o documento: metadados de cabeçalho, Premissas 2 e 3, diagrama Mermaid (Seção 6.1), tabela de Recursos AWS (Seção 6.2, incluindo os nomes lógicos que embutem o segmento `{region}`, ex.: `prd-networking-vpc-sa-east-1` → `prd-networking-vpc-us-east-1`), Naming Convention (Seção 9), variável de input `aws_region` (Seção 13.2) e estimativa de custo (Seção 10). AZs atualizadas de `sa-east-1a`/`sa-east-1b` para `us-east-1a`/`us-east-1b` — `us-east-1` possui 6 AZs (`us-east-1a` a `us-east-1f`, validado via `aws-mcp`/`ec2:DescribeAvailabilityZones` em 2026-08-30), mais que as 3 AZs de `sa-east-1`; a stack continua usando 2 das AZs disponíveis da região, mesma decisão de contagem já vigente desde a versão original (Premissa 3) — apenas os nomes literais das AZs mudam. Estimativa de custo (Seção 10) recalculada para `us-east-1`: NAT Gateway a `US$ 0,045`/hora nesta região (vs. `US$ 0,059`/hora assumido para `sa-east-1`), reduzindo a estimativa de ~USD 55–80/mês para ~USD 40–65/mês (pricing público validado via busca dirigida — a Pricing API não está exposta pelo `aws-mcp` neste ambiente). **Nenhum recurso real existe hoje sob `sa-east-1` para esta stack** — o `terraform destroy` real já foi executado em 2026-08-30 (ver `docs/deployments/01-networking-stack-ai.md`, status "STACK DESTRUÍDA"); esta revisão é, portanto, uma correção de documentação/decisão arquitetural antes de um futuro re-apply, **não** uma migração de infraestrutura viva. Nenhuma decisão de CIDR, plano de sub-redes, contagem de AZs ou estratégia de NAT Gateway foi alterada por esta revisão — apenas a região e os valores/nomes diretamente derivados dela. **Nota para o `devops-engineer`:** o código Terraform (`.tf`) desta stack não foi tocado por esta revisão (fora do escopo do `aws-architect`) e ainda referencia `sa-east-1`; deve ser realinhado a este ADR antes de qualquer novo `apply`.
 
 ---
 
@@ -45,6 +46,8 @@ Embora o pedido original mencione apenas "uma VPC", uma VPC isolada sem sub-rede
 > - Como nenhuma dessas condições agravantes se aplica (sem `apply` real, sem mudança de arquitetura de recursos), o overhead de abrir um novo ADR não se justifica — o histórico de revisões no cabeçalho já preserva a recomendação original (HA para prd) e o racional completo da reversão, garantindo rastreabilidade equivalente à de um sucessor.
 >
 > Um novo ADR sucessor **seria** a escolha correta caso, no futuro, (i) esta stack seja de fato aplicada em produção sob a configuração de NAT único e, posteriormente, precise evoluir para HA (ou vice-versa) — nesse caso, tratar como migração de infraestrutura com plano próprio; ou (ii) um segundo ambiente seja reintroduzido — nesse caso, o redesenho da parametrização de `environment` (Seção 4, decisão D2) provavelmente justificaria um documento novo, dado que a Revisão 5 elimina deliberadamente essa parametrização.
+
+> **Nota de revisão (2026-08-30) — Revisão 6, mudança de região:** ver histórico de revisões no cabeçalho para o detalhamento completo. Resumo: `sa-east-1` → `us-east-1`, decisão de padronização de repositório (não arquitetural), sem `apply` real pendente sob a região antiga (stack já destruída), sem impacto em CIDR/sub-redes/NAT Gateway. Decisão de revisão in-place, pelo mesmo racional já estabelecido nas Revisões 4/5 (mudança de *valor* de configuração, não de arquitetura).
 
 ## 2. Drivers de Decisão
 
@@ -79,12 +82,12 @@ Embora o pedido original mencione apenas "uma VPC", uma VPC isolada sem sub-rede
 Como nem todo o checklist de discovery foi respondido explicitamente pelo solicitante, as premissas abaixo foram adotadas. Devem ser validadas antes da implementação — qualquer divergência exige ajuste neste ADR.
 
 1. **Ambiente alvo (Revisado na Revisão 5):** a stack passa a ser desenhada e aplicada para **um único ambiente: `prd`**. Os ambientes `dev` e `hml`, previstos desde a versão original como caminho de promoção, são **removidos** do escopo desta stack a partir desta revisão — confirmado explicitamente pelo solicitante nesta sessão. Reintrodução futura de múltiplos ambientes é tratada como Non-goal (Seção 14) e exigiria nova revisão/ADR.
-2. **Região primária:** `sa-east-1` (São Paulo), por ser a região padrão para cargas de trabalho brasileiras. Validada como região ativa via `aws-mcp` (`list_regions`). Não há requisito de multi-região/DR informado; DR está fora de escopo.
-3. **AZs utilizadas:** `sa-east-1` possui 3 AZs. Nesta versão, a stack usa **2 AZs** (`sa-east-1a`, `sa-east-1b`). O plano de sub-redes (4× `/26`) não reserva espaço de CIDR para uma 3ª AZ dentro do `/24` primário — uma 3ª AZ exigiria um CIDR IPv4 secundário associado à VPC (ver Seção 11). Inalterado nesta revisão.
+2. **Região primária (Revisado na Revisão 6):** `us-east-1` (N. Virginia) — região padrão do projeto para todo novo ADR a partir de 2026-08-30 (`CLAUDE.md`), aplicada retroativamente a esta stack a pedido explícito do solicitante, substituindo `sa-east-1` (São Paulo), assumida nas Revisões 1–5 como região padrão para cargas de trabalho brasileiras. Validada como região ativa via `aws-mcp` (`list_regions`). Não há requisito de multi-região/DR informado; DR está fora de escopo.
+3. **AZs utilizadas (Revisado na Revisão 6):** `us-east-1` possui 6 AZs (`us-east-1a` a `us-east-1f`, validado via `aws-mcp`/`ec2:DescribeAvailabilityZones` em 2026-08-30) — mais que as 3 AZs de `sa-east-1` assumidas até a Revisão 5. Nesta versão, a stack continua usando **2 AZs** (agora `us-east-1a`, `us-east-1b` — mesma decisão de contagem, apenas os nomes literais mudam). O plano de sub-redes (4× `/26`) não reserva espaço de CIDR para uma 3ª AZ dentro do `/24` primário — uma 3ª AZ exigiria um CIDR IPv4 secundário associado à VPC (ver Seção 11).
 4. **SLA/RTO/RPO (Revisado na Revisão 5):** não informados formalmente pelo solicitante. Até a Revisão 4, a ausência de SLA era usada para justificar NAT único como default apenas em ambientes não críticos (`dev`/`hml`), com HA recomendada para `prd`. **A partir desta revisão, essa distinção deixa de existir**: o único ambiente é `prd`, e a escolha por NAT único foi feita conscientemente pelo solicitante (Premissa 14) mesmo sabendo que se trata do ambiente de produção — não é mais uma inferência deste ADR a partir da ausência de SLA, e sim uma decisão explícita registrada.
 5. **Compliance:** nenhum framework (LGPD/PCI-DSS/HIPAA/SOC2/ISO27001) foi indicado. Controles de segurança de rede básicos (VPC Flow Logs, least privilege, sem exposição desnecessária) são aplicados por padrão. Inalterado.
 6. **Budget:** não informado com valor numérico. Assume-se sensibilidade a custo — e, a partir desta revisão, essa sensibilidade foi **confirmada explicitamente pelo solicitante como prioritária sobre a HA de NAT Gateway em produção** (Premissa 14), não mais apenas para `dev`/`hml`.
-7. **Estado atual:** greenfield **de fato**, não apenas por ausência de informação em contrário. Conforme `01-networking-stack-ai/README.md` (estado anterior a esta revisão), nenhum `terraform apply` real foi executado contra uma conta AWS até o momento — apenas `terraform plan` foi validado, com backend local temporário descartado após o teste, para os três ambientes então existentes (`dev`/`hml`/`prd`). Isso elimina o risco de conflito de state/infraestrutura real ao remover `dev`/`hml` e alterar a estratégia de NAT de `prd`, e é o fundamento central da decisão de revisão in-place (Seção 1). Deve ser revalidado antes do `apply` desta revisão (Seção 13.1, passo 0).
+7. **Estado atual:** greenfield **de fato**, não apenas por ausência de informação em contrário. Conforme `01-networking-stack-ai/README.md` (estado anterior a esta revisão), nenhum `terraform apply` real foi executado contra uma conta AWS até o momento — apenas `terraform plan` foi validado, com backend local temporário descartado após o teste, para os três ambientes então existentes (`dev`/`hml`/`prd`). Isso elimina o risco de conflito de state/infraestrutura real ao remover `dev`/`hml` e alterar a estratégia de NAT de `prd`, e é o fundamento central da decisão de revisão in-place (Seção 1). Deve ser revalidado antes do `apply` desta revisão (Seção 13.1, passo 0). **(Nota — Revisão 6)** esta premissa segue válida e, adicionalmente, a stack foi de fato aplicada e depois **destruída** (`terraform destroy` real, 2026-08-30) sob `sa-east-1` antes desta revisão de região — ver `docs/deployments/01-networking-stack-ai.md`. Não há, portanto, nenhum recurso real hoje sob a região antiga.
 8. **Backend remoto de state:** assume-se que o bucket S3 (e eventual mecanismo de locking) para o Terraform state já existe ou será provisionado em uma stack de bootstrap separada (ex.: `00-bootstrap`), fora do escopo deste ADR. **(Revisado na Revisão 5)** Com a remoção de `dev`/`hml`, não é mais necessário um arquivo `backend-<env>.hcl` por ambiente — um único `backend.hcl` (sem sufixo) passa a ser suficiente (ver Seção 13.1).
 9. **Ferramenta de IaC:** Terraform é o padrão definido pelo solicitante. Inalterado.
 10. **Nome lógico do projeto:** assume-se `networking` como valor default de `project_name`. Inalterado.
@@ -94,6 +97,7 @@ Como nem todo o checklist de discovery foi respondido explicitamente pelo solici
 14. **(Nova — Revisão 5) Decisão consciente de NAT Gateway único também em `prd`:** diante da redução para ambiente único, foi perguntado explicitamente ao solicitante se `prd` deveria manter a HA completa (2 NAT Gateways, 1 por AZ — recomendação original deste ADR desde a Revisão 1) ou passar a usar NAT Gateway único (a configuração antes reservada a `dev`/`hml`). **O solicitante escolheu explicitamente NAT Gateway único**, priorizando custo sobre a recomendação de confiabilidade que este ADR fazia para produção. Esta premissa registra que se trata de uma **decisão de negócio explícita do solicitante**, não de uma correção de erro ou de uma inferência deste ADR — o trade-off de confiabilidade reduzida (ponto único de falha em produção) é mantido visível e não removido do documento, ver Seção 11 (Riscos).
 15. **(Nova — Revisão 5) Remoção da variável `environment`:** como esta stack passa a suportar apenas um valor (`prd`), a variável Terraform `environment` deixa de existir como input livre e passa a ser um valor fixo (`local.environment = "prd"`), decisão comparada com a alternativa de mantê-la como variável com validação restrita — ver Seção 4 (decisão D2) e Seção 5. A tag `Environment` e o segmento `{env}` da naming convention (Seção 9) continuam existindo — apenas resolvem sempre para `"prd"`.
 16. **(Nova — Revisão 5) Ausência de ambiente inferior para pré-validação:** com a remoção de `dev`/`hml`, esta stack deixa de ter um ambiente de teste próprio onde uma mudança de infraestrutura de rede possa ser aplicada e observada antes de impactar `prd`. Mudanças passam a ser validadas exclusivamente via `terraform plan` + revisão por pares obrigatória contra o único ambiente existente. Tratado como risco operacional explícito na Seção 11.
+17. **(Nova — Revisão 6) Mudança de região é puramente de padronização de repositório, não uma decisão arquitetural nova:** `us-east-1` passa a ser a região padrão de todo novo ADR deste repositório a partir de 2026-08-30 (`CLAUDE.md`); esta revisão aplica esse padrão retroativamente a este documento, a pedido explícito do solicitante, sem reabrir nenhuma outra decisão arquitetural (CIDR, contagem de AZs, estratégia de NAT). Tratada com o mesmo racional de revisão in-place já usado nas Revisões 4/5.
 
 ## 4. Opções Consideradas
 
@@ -129,13 +133,13 @@ Como nem todo o checklist de discovery foi respondido explicitamente pelo solici
 - **Descrição:** manter `nat_gateway.single_nat_gateway = true` / `one_nat_gateway_per_az = false` — a mesma configuração antes usada apenas em `dev`/`hml`, agora também em `prd`.
 - **Prós:** redução de ~50% de custo frente à HA (Seção 10); nenhuma mudança de código Terraform necessária — as flags e a lógica condicional em `locals.tf`/`vpc.nat-gateway.tf`/`vpc.route-tables.tf` já suportam esse valor sem alteração.
 - **Contras:** ponto único de falha em produção — indisponibilidade do NAT Gateway (manutenção da AZ, falha do recurso) interrompe o egress de **todas** as sub-redes privadas de `prd`, sem failover automático.
-- **Custo estimado:** ~USD 55–80/mês (Seção 10).
+- **Custo estimado:** ~USD 40–65/mês (Seção 10; recalculado para `us-east-1` na Revisão 6).
 
 ##### Opção B — NAT Gateway HA (1 por AZ, 2 no total) — recomendação original deste ADR para `prd` (Revisões 1–4)
 - **Descrição:** manter `nat_gateway.single_nat_gateway = false` / `one_nat_gateway_per_az = true`.
 - **Prós:** elimina o ponto único de falha; alinhado à prática de Reliability que este próprio ADR recomendava para produção até a Revisão 4.
 - **Contras:** ~2× o custo do NAT Gateway.
-- **Custo estimado:** ~USD 120–200+/mês (Seção 10, valor anteriormente vigente para `prd`).
+- **Custo estimado:** ~USD 75–100/mês (Seção 10, recalculado para `us-east-1` na Revisão 6; valor anteriormente vigente para `sa-east-1` era ~USD 120–200+/mês).
 
 **Decisão:** Opção A, por escolha explícita e consciente do solicitante (Premissa 14), priorizando custo sobre a recomendação de confiabilidade que este ADR fazia até a Revisão 4. O risco resultante é tratado como **aceito e não mitigado por redundância** — apenas por monitoramento — na Seção 11.
 
@@ -170,6 +174,8 @@ Justificativa, referenciando os drivers da Seção 2: por exigência explícita 
 
 Justificativa consolidada: as três decisões acima são derivações diretas e coerentes de um único requisito de negócio (redução da stack para um único ambiente de produção), confirmado explicitamente pelo solicitante nesta sessão, e não alteram a arquitetura de recursos nem o trade-off central da Seção 4 (organização de arquivos) — fundamento da decisão de revisão in-place (Seção 1).
 
+**Decisão da Revisão 6 (mudança de região):** adotado `us-east-1` como região primária, em substituição a `sa-east-1`, por conformidade com a nova região padrão do projeto para todo ADR a partir de 2026-08-30, aplicada retroativamente a pedido do solicitante — decisão de padronização de repositório, não uma reavaliação técnica de onde a carga de trabalho deveria residir. Nenhuma outra decisão arquitetural (CIDR, sub-redes, NAT Gateway) é reaberta.
+
 ## 6. Arquitetura Proposta
 
 ### 6.1 Diagrama
@@ -179,13 +185,13 @@ flowchart TB
     Internet((Internet))
     IGW["Internet Gateway"]
 
-    subgraph VPC["VPC 10.0.0.0/24 — prd-networking-vpc-sa-east-1 (ambiente único)"]
-        subgraph AZ1["AZ sa-east-1a"]
+    subgraph VPC["VPC 10.0.0.0/24 — prd-networking-vpc-us-east-1 (ambiente único)"]
+        subgraph AZ1["AZ us-east-1a"]
             PUB1["Subnet pública\n10.0.0.0/26"]
             NAT1["NAT Gateway (único)"]
             PRIV1["Subnet privada\n10.0.0.128/26"]
         end
-        subgraph AZ2["AZ sa-east-1b"]
+        subgraph AZ2["AZ us-east-1b"]
             PUB2["Subnet pública\n10.0.0.64/26"]
             PRIV2["Subnet privada\n10.0.0.192/26"]
         end
@@ -199,34 +205,34 @@ flowchart TB
     PRIV2 -- "rota default → NAT único (cross-AZ, SPOF aceito em prd)" --> NAT1
 ```
 
-> Diagrama editável equivalente, com fluxo "vivo" (setas animadas), gerado em `docs/diagramas/ADR-0001-networking-stack-vpc.drawio` — ver seção **DIAGRAMA DRAW.IO** destas instruções. **Atualizado na Revisão 5:** os placeholders `{env}` foram substituídos pelo valor literal `prd` em todos os nomes lógicos (agora fixo, ver Seção 5/9), já que a stack passa a ter um único ambiente. As anotações de "NAT único (default dev/hml)" foram atualizadas para "NAT único (SPOF aceito em prd)", refletindo que esta topologia deixou de ser apenas o "caminho default de menor custo" e passou a ser a configuração definitiva e única do ambiente de produção — decisão consciente do solicitante (Premissa 14), não mais uma variante entre outras representada apenas parcialmente no diagrama.
+> Diagrama editável equivalente, com fluxo "vivo" (setas animadas), gerado em `docs/diagramas/ADR-0001-networking-stack-vpc.drawio` — ver seção **DIAGRAMA DRAW.IO** destas instruções. **Atualizado na Revisão 5:** os placeholders `{env}` foram substituídos pelo valor literal `prd` em todos os nomes lógicos (agora fixo, ver Seção 5/9), já que a stack passa a ter um único ambiente. As anotações de "NAT único (default dev/hml)" foram atualizadas para "NAT único (SPOF aceito em prd)", refletindo que esta topologia deixou de ser apenas o "caminho default de menor custo" e passou a ser a configuração definitiva e única do ambiente de produção — decisão consciente do solicitante (Premissa 14), não mais uma variante entre outras representada apenas parcialmente no diagrama. **Atualizado na Revisão 6:** AZs e o segmento `{region}` do nome lógico da VPC atualizados de `sa-east-1`/`sa-east-1a`/`sa-east-1b` para `us-east-1`/`us-east-1a`/`us-east-1b`.
 
 > Nota: o diagrama descreve a topologia lógica de rede. Ver Seção 6.2 para o mapeamento resource-a-resource, com todos os recursos declarados como nativos do provider `hashicorp/aws`.
 
 ### 6.2 Recursos AWS
 
-> Todos os recursos abaixo são recursos nativos do provider `hashicorp/aws`, declarados diretamente nos arquivos `.tf` da stack — nenhum é criado via bloco `module`. **Tabela atualizada na Revisão 5:** nomes lógicos passam de `{env}-...` para `prd-...` (valor fixo, Seção 5/9); as linhas de EIP/NAT Gateway/tabela de rotas privada deixam de descrever "1 (dev/hml) ou 2 (prd)" e passam a descrever a configuração única e definitiva do ambiente `prd` (NAT único).
+> Todos os recursos abaixo são recursos nativos do provider `hashicorp/aws`, declarados diretamente nos arquivos `.tf` da stack — nenhum é criado via bloco `module`. **Tabela atualizada na Revisão 5:** nomes lógicos passam de `{env}-...` para `prd-...` (valor fixo, Seção 5/9); as linhas de EIP/NAT Gateway/tabela de rotas privada deixam de descrever "1 (dev/hml) ou 2 (prd)" e passam a descrever a configuração única e definitiva do ambiente `prd` (NAT único). **Tabela atualizada na Revisão 6:** coluna Região e segmento `{region}`/AZ dos nomes lógicos atualizados de `sa-east-1(a/b)` para `us-east-1(a/b)`.
 
 | Recurso | Tipo (Terraform) | Nome lógico | Região | Observações |
 |---|---|---|---|---|
-| VPC | `aws_vpc` | `prd-networking-vpc-sa-east-1` | sa-east-1 | CIDR `10.0.0.0/24` fixo (requisito de negócio). `enable_dns_support`/`enable_dns_hostnames` = `true`. |
-| Sub-rede pública AZ1 | `aws_subnet` | `prd-networking-public-sa-east-1a` | sa-east-1a | `10.0.0.0/26` (64 IPs), calculado via `cidrsubnet(var.vpc.cidr, 2, 0)`. `map_public_ip_on_launch = true`. |
-| Sub-rede pública AZ2 | `aws_subnet` | `prd-networking-public-sa-east-1b` | sa-east-1b | `10.0.0.64/26` (64 IPs), calculado via `cidrsubnet(var.vpc.cidr, 2, 1)`. |
-| Sub-rede privada AZ1 | `aws_subnet` | `prd-networking-private-sa-east-1a` | sa-east-1a | `10.0.0.128/26` (64 IPs), calculado via `cidrsubnet(var.vpc.cidr, 2, 2)`. Sem IP público. |
-| Sub-rede privada AZ2 | `aws_subnet` | `prd-networking-private-sa-east-1b` | sa-east-1b | `10.0.0.192/26` (64 IPs), calculado via `cidrsubnet(var.vpc.cidr, 2, 3)`. |
-| Internet Gateway | `aws_internet_gateway` | `prd-networking-igw-sa-east-1` | sa-east-1 | Anexado à VPC (`vpc_id`); referenciado pela rota default da tabela pública. Inalterado. |
-| Elastic IP do NAT | `aws_eip` | `prd-networking-nat-eip-sa-east-1a` | sa-east-1 | `domain = "vpc"`. **1 EIP (NAT Gateway único — Revisão 5: configuração única e definitiva de `prd`, não mais um "default dev/hml")**. |
-| NAT Gateway | `aws_nat_gateway` | `prd-networking-nat-sa-east-1a` | sa-east-1 | **1 NAT Gateway compartilhado**, associado à sub-rede pública AZ1 (`10.0.0.0/26`) — configuração única do ambiente `prd` a partir desta revisão (Premissa 14). |
-| Tabela de rotas pública | `aws_route_table` | `prd-networking-rt-public-sa-east-1` | sa-east-1 | 1 tabela, compartilhada pelas 2 sub-redes públicas. Inalterado. |
-| Tabela de rotas privada | `aws_route_table` | `prd-networking-rt-private-sa-east-1` | sa-east-1 | **1 tabela compartilhada** (NAT único) — total de **2** `aws_route_table` na stack (antes podiam ser 2 ou 3, dependendo do ambiente). |
-| Rotas default | `aws_route` | `prd-networking-rt-public-default` / `prd-networking-rt-private-default` | sa-east-1 | 1 rota pública `0.0.0.0/0` → Internet Gateway + 1 rota privada `0.0.0.0/0` → NAT Gateway único. |
-| Associações de rota | `aws_route_table_association` | — | sa-east-1 | 4 associações — uma por sub-rede (2 públicas + 2 privadas). Inalterado. |
-| Default Security Group | `aws_default_security_group` | `prd-networking-default-sg` | sa-east-1 | Sem regras de entrada/saída (`ingress`/`egress` vazios) — least privilege por padrão. Inalterado. |
-| Default Network ACL | `aws_default_network_acl` | `prd-networking-default-nacl` | sa-east-1 | Mantida no padrão allow-all nesta fase. Inalterado. |
-| VPC Flow Logs | `aws_flow_log` | `prd-networking-flow-log` | sa-east-1 | Associado à VPC (`vpc_id`). Inalterado. |
-| Log Group de Flow Logs | `aws_cloudwatch_log_group` | `/aws/vpc-flow-log/prd-networking` | sa-east-1 | Retenção parametrizável (default 30 dias). Inalterado. |
-| IAM Role de Flow Logs | `aws_iam_role` + `aws_iam_role_policy` | `prd-networking-flow-logs-role` | sa-east-1 | Escopo mínimo, restrito ao ARN do log group específico. Inalterado. |
-| Data source de AZs | `aws_availability_zones` | — | sa-east-1 | Resolve dinamicamente as AZs disponíveis. Inalterado. |
+| VPC | `aws_vpc` | `prd-networking-vpc-us-east-1` | us-east-1 | CIDR `10.0.0.0/24` fixo (requisito de negócio). `enable_dns_support`/`enable_dns_hostnames` = `true`. |
+| Sub-rede pública AZ1 | `aws_subnet` | `prd-networking-public-us-east-1a` | us-east-1a | `10.0.0.0/26` (64 IPs), calculado via `cidrsubnet(var.vpc.cidr, 2, 0)`. `map_public_ip_on_launch = true`. |
+| Sub-rede pública AZ2 | `aws_subnet` | `prd-networking-public-us-east-1b` | us-east-1b | `10.0.0.64/26` (64 IPs), calculado via `cidrsubnet(var.vpc.cidr, 2, 1)`. |
+| Sub-rede privada AZ1 | `aws_subnet` | `prd-networking-private-us-east-1a` | us-east-1a | `10.0.0.128/26` (64 IPs), calculado via `cidrsubnet(var.vpc.cidr, 2, 2)`. Sem IP público. |
+| Sub-rede privada AZ2 | `aws_subnet` | `prd-networking-private-us-east-1b` | us-east-1b | `10.0.0.192/26` (64 IPs), calculado via `cidrsubnet(var.vpc.cidr, 2, 3)`. |
+| Internet Gateway | `aws_internet_gateway` | `prd-networking-igw-us-east-1` | us-east-1 | Anexado à VPC (`vpc_id`); referenciado pela rota default da tabela pública. Inalterado. |
+| Elastic IP do NAT | `aws_eip` | `prd-networking-nat-eip-us-east-1a` | us-east-1 | `domain = "vpc"`. **1 EIP (NAT Gateway único — Revisão 5: configuração única e definitiva de `prd`, não mais um "default dev/hml")**. |
+| NAT Gateway | `aws_nat_gateway` | `prd-networking-nat-us-east-1a` | us-east-1 | **1 NAT Gateway compartilhado**, associado à sub-rede pública AZ1 (`10.0.0.0/26`) — configuração única do ambiente `prd` a partir desta revisão (Premissa 14). |
+| Tabela de rotas pública | `aws_route_table` | `prd-networking-rt-public-us-east-1` | us-east-1 | 1 tabela, compartilhada pelas 2 sub-redes públicas. Inalterado. |
+| Tabela de rotas privada | `aws_route_table` | `prd-networking-rt-private-us-east-1` | us-east-1 | **1 tabela compartilhada** (NAT único) — total de **2** `aws_route_table` na stack (antes podiam ser 2 ou 3, dependendo do ambiente). |
+| Rotas default | `aws_route` | `prd-networking-rt-public-default` / `prd-networking-rt-private-default` | us-east-1 | 1 rota pública `0.0.0.0/0` → Internet Gateway + 1 rota privada `0.0.0.0/0` → NAT Gateway único. |
+| Associações de rota | `aws_route_table_association` | — | us-east-1 | 4 associações — uma por sub-rede (2 públicas + 2 privadas). Inalterado. |
+| Default Security Group | `aws_default_security_group` | `prd-networking-default-sg` | us-east-1 | Sem regras de entrada/saída (`ingress`/`egress` vazios) — least privilege por padrão. Inalterado. |
+| Default Network ACL | `aws_default_network_acl` | `prd-networking-default-nacl` | us-east-1 | Mantida no padrão allow-all nesta fase. Inalterado. |
+| VPC Flow Logs | `aws_flow_log` | `prd-networking-flow-log` | us-east-1 | Associado à VPC (`vpc_id`). Inalterado. |
+| Log Group de Flow Logs | `aws_cloudwatch_log_group` | `/aws/vpc-flow-log/prd-networking` | us-east-1 | Retenção parametrizável (default 30 dias). Inalterado. |
+| IAM Role de Flow Logs | `aws_iam_role` + `aws_iam_role_policy` | `prd-networking-flow-logs-role` | us-east-1 | Escopo mínimo, restrito ao ARN do log group específico. Inalterado. |
+| Data source de AZs | `aws_availability_zones` | — | us-east-1 | Resolve dinamicamente as AZs disponíveis. Inalterado. |
 
 ### 6.3 Módulos Terraform Recomendados
 
@@ -245,7 +251,7 @@ flowchart TB
 | **Security** | Sub-redes privadas sem IP público; Security Group e NACL default sem regras abertas; NAT Gateway como único ponto de saída controlado; VPC Flow Logs habilitados por padrão. Nenhum controle de segurança foi alterado por esta revisão. |
 | **Reliability** | **(Revisado materialmente na Revisão 5)** Sub-redes e Internet Gateway permanecem distribuídos em 2 AZs. **O NAT Gateway, porém, deixa de ter caminho de HA ativo em qualquer ambiente da stack** — a única configuração suportada a partir desta revisão é NAT único, inclusive em `prd`. Isso é uma **regressão deliberada** deste pilar frente às Revisões 1–4 (que recomendavam e, em `prd`, adotavam HA completa), aceita conscientemente pelo solicitante em troca de custo (Premissa 14). O código mantém a flag `one_nat_gateway_per_az` funcional (não removida) como caminho de reversão futura de baixo esforço, caso a postura de risco mude — ver Seção 11. |
 | **Performance Efficiency** | NAT Gateway gerenciado pela AWS escala automaticamente até 45 Gbps por gateway. Sub-redes `/26` (64 IPs cada, 59 utilizáveis) inalterado desde a Revisão 4. |
-| **Cost Optimization** | **(Melhorado na Revisão 5)** Com a eliminação da HA de NAT Gateway em `prd`, a estimativa de custo do (único) ambiente da stack cai de ~USD 120–200+/mês para ~USD 55–80/mês (Seção 10) — redução de ~50%. Este é o resultado direto e esperado da decisão de negócio registrada na Premissa 14. |
+| **Cost Optimization** | **(Melhorado na Revisão 5)** Com a eliminação da HA de NAT Gateway em `prd`, a estimativa de custo do (único) ambiente da stack cai de ~USD 75–100/mês para ~USD 40–65/mês (Seção 10) — redução de ~45–50%. Este é o resultado direto e esperado da decisão de negócio registrada na Premissa 14. **(Revisão 6)** os valores absolutos foram recalculados para `us-east-1` (NAT Gateway ~24% mais barato por hora nesta região que em `sa-east-1`), mas a proporção da economia entre NAT único e HA permanece equivalente. |
 | **Sustainability** | O plano de sub-redes utiliza 100% do CIDR alocado (inalterado desde a Revisão 4). A remoção de `dev`/`hml` e de um segundo NAT Gateway em `prd` reduz o número total de recursos provisionados e o consumo de recursos computacionais/de rede associado, alinhado a um princípio de minimizar recursos não estritamente necessários — ainda que o driver desta mudança tenha sido custo, não sustentabilidade. |
 
 ## 8. Segurança
@@ -261,7 +267,7 @@ flowchart TB
 
 ## 9. Naming Convention & Tagging
 
-- **Padrão de nomes:** `{env}-{project_name}-{service}-{region}` (ex.: `prd-networking-vpc-sa-east-1`). **(Revisado na Revisão 5)** O padrão em si **não muda** — o segmento `{env}` continua existindo na naming convention por valor semântico (identifica o ambiente ao consultar recursos no console/CloudTrail/Resource Groups, mesmo havendo apenas um). O que muda é a **origem** do valor: `{env}` deixa de vir de uma `variable` livre e passa a resolver sempre para o valor fixo `"prd"`, definido como `local.environment` (Seção 4/5/13). Nenhum nome lógico de recurso muda de formato — apenas o valor do segmento, de `{env}` (placeholder) para `prd` (literal).
+- **Padrão de nomes:** `{env}-{project_name}-{service}-{region}` (ex.: `prd-networking-vpc-us-east-1`, atualizado na Revisão 6 — antes `prd-networking-vpc-sa-east-1`). **(Revisado na Revisão 5)** O padrão em si **não muda** — o segmento `{env}` continua existindo na naming convention por valor semântico (identifica o ambiente ao consultar recursos no console/CloudTrail/Resource Groups, mesmo havendo apenas um). O que muda é a **origem** do valor: `{env}` deixa de vir de uma `variable` livre e passa a resolver sempre para o valor fixo `"prd"`, definido como `local.environment` (Seção 4/5/13). Nenhum nome lógico de recurso muda de formato — apenas o valor do segmento, de `{env}` (placeholder) para `prd` (literal). **(Revisado na Revisão 6)** o segmento `{region}` resolve agora para `us-east-1` (e `us-east-1a`/`us-east-1b` nos nomes por AZ), em vez de `sa-east-1`(`a`/`b`) — mesma lógica de resolução de placeholder, apenas o valor muda.
 - **Tags obrigatórias:**
   - `Environment` = `"prd"` (fixo — Revisão 5; antes um de `dev`/`hml`/`prd`)
   - `Owner` (time responsável — a definir pelo solicitante)
@@ -273,18 +279,18 @@ flowchart TB
 
 ## 10. Custo Estimado
 
-Estimativas em ordem de grandeza para região `sa-east-1`. **Tabela recalculada na Revisão 5:** com a remoção de `dev`/`hml` e a adoção de NAT único também em `prd` (Premissa 14), a stack passa a ter uma única estimativa de custo mensal — a mesma ordem de grandeza que antes era exclusiva de `dev`/`hml`.
+Estimativas em ordem de grandeza para região `us-east-1` (Revisão 6 — anteriormente calculadas para `sa-east-1`, ver histórico de revisões). **Tabela recalculada na Revisão 5** (remoção de `dev`/`hml`, NAT único também em `prd` — Premissa 14) **e novamente na Revisão 6** (mudança de região: NAT Gateway a `US$ 0,045`/hora em `us-east-1` vs. `US$ 0,059`/hora assumido para `sa-east-1`, ~24% mais barato).
 
 | Item | Modelo de pricing | Estimativa mensal (USD) — `prd` (único ambiente, 1 NAT) |
 |---|---|---|
 | VPC, sub-redes, IGW, tabelas de rota | Sem custo | 0 |
-| NAT Gateway (hora) | On-demand | ~43 (1 × 730h × 0,059) |
+| NAT Gateway (hora) | On-demand | ~33 (1 × 730h × 0,045) |
 | NAT Gateway (Elastic IP associado) | Sem custo enquanto em uso | 0 |
-| Processamento de dados via NAT | On-demand por GB | ~10–30 (estimado; volume real de produção deve ser validado — diferente de `dev`/`hml`, este é agora tráfego de `prd`) |
+| Processamento de dados via NAT | On-demand por GB | ~8–25 (estimado; volume real de produção deve ser validado — diferente de `dev`/`hml`, este é agora tráfego de `prd`) |
 | VPC Flow Logs (CloudWatch Logs — ingestão + armazenamento) | On-demand por GB | ~1–5 |
-| **Total estimado** | | **~ USD 55–80** |
+| **Total estimado** | | **~ USD 40–65** |
 
-> **Redução de ~50% frente à estimativa anterior de `prd` com HA** (~USD 120–200+/mês, Revisões 1–4) — consequência direta da decisão registrada na Premissa 14. Estimativa em ordem de grandeza; validar com Cost Explorer ou AWS Pricing Calculator antes do go-live, especialmente o item de "Processamento de dados via NAT", cujo volume real em produção pode ser maior do que o assumido para um ambiente de dev/hml.
+> Redução frente à estimativa de `prd` com HA em `us-east-1` (~USD 75–100/mês, recalculada na Seção 4/D1) — consequência direta da decisão registrada na Premissa 14. Valores em `sa-east-1` (vigentes até a Revisão 5: ~USD 55–80/mês para NAT único, ~USD 120–200+/mês para HA) substituídos nesta revisão pelos valores de `us-east-1`, validados via pesquisa pública de pricing (a Pricing API não está exposta pelo `aws-mcp` neste ambiente). Estimativa em ordem de grandeza; validar com Cost Explorer ou AWS Pricing Calculator antes do go-live, especialmente o item de "Processamento de dados via NAT", cujo volume real em produção pode ser maior do que o assumido para um ambiente de dev/hml.
 
 ## 11. Riscos e Mitigações
 
@@ -297,27 +303,29 @@ Estimativas em ordem de grandeza para região `sa-east-1`. **Tabela recalculada 
 | **(Nova — Revisão 5) Ausência de ambiente inferior para pré-validação de mudanças:** com a remoção de `dev`/`hml`, não existe mais, dentro desta stack, um ambiente onde uma mudança de rede possa ser aplicada e observada antes de impactar `prd` (Premissa 16) | Média | Médio-Alto (aumenta o custo de um erro de configuração não detectado antes do `apply`) | `terraform plan` revisado obrigatoriamente por pares antes de todo `apply` (não opcional, dado que não há mais ambiente de teste); considerar, como evolução futura fora do escopo desta revisão, uma conta/ambiente sandbox separado para validação de mudanças estruturais de rede antes de `prd`. |
 | Maior superfície de código boilerplate para escrever e manter, com risco de omissão | **(Reduzido na Revisão 5)** Média → Baixa-Média, já que o número de arquivos de valores cai de 3 (`envs/dev.tfvars`, `envs/hml.tfvars`, `envs/prd.tfvars`) para 1 (`terraform.tfvars` na raiz) | Médio | Checklist de revisão de PR baseado na Seção 13.1 desta revisão, que lista explicitamente cada arquivo a remover/editar; `terraform plan` revisado por par antes de todo `apply`. |
 | Ausência de backend remoto configurado (bootstrap não implementado) impede `terraform init` desta stack | Média | Alto (bloqueia toda a implementação) | Tratado como pré-requisito explícito na Seção 13.1; se não existir, deve ser resolvido antes por uma stack `00-bootstrap` (fora do escopo deste ADR). Inalterado. |
+| **(Nova — Revisão 6) Código Terraform (`.tf`) ainda referencia `sa-east-1`, desalinhado deste ADR até que o `devops-engineer` o atualize** — esta revisão é documentação/decisão, não implementação (fora do escopo do `aws-architect`) | Alta (é o estado atual conhecido) | Médio (bloqueia apenas um futuro `apply` correto até o realinhamento; nenhum recurso real existe hoje sob a região antiga) | Antes de qualquer novo `apply` desta stack, o `devops-engineer` deve realinhar `.tf`/`.tfvars.example`/`backend.hcl.example`/`README.md` a este ADR (região, AZs, nomes lógicos) — tratado como pré-requisito bloqueante, não uma tarefa desta revisão. |
 
 ## 12. Estratégia de Rollback
 
 Esta stack não gerencia dados stateful (bancos de dados, storage de aplicação); portanto, o rollback é primariamente de **configuração de rede**, não de dados.
 
-- **Cenário desta revisão (mais provável, por não haver `apply` real ainda — Premissa 7):** como nenhuma VPC real existe hoje sob esta stack, o "rollback" da Revisão 5, se necessário, é trivial: `git revert` do commit que removeu `dev`/`hml`, a variável `environment` e alterou a estratégia de NAT de `prd`, seguido de novo `terraform plan`. Nenhuma infraestrutura é afetada.
-- **Se, após esta revisão, `prd` já tiver sido aplicado com NAT único e for necessário reverter para HA (ou vice-versa):** diferente da imutabilidade do `cidr_block` (que força destroy+create de toda a VPC), a mudança entre NAT único e HA **não** força recriação da VPC nem das sub-redes — apenas cria/destrói o segundo `aws_eip`/`aws_nat_gateway`/`aws_route_table` privado e ajusta a rota correspondente. É um `apply` incremental de baixo risco: bastam as flags `nat_gateway.single_nat_gateway`/`one_nat_gateway_per_az` em `terraform.tfvars` seguidas de `terraform plan`/`apply`. Recomenda-se, ainda assim, executar em janela de baixo tráfego, pois a sub-rede privada cuja tabela de rotas for recriada perde conectividade de egress por alguns segundos durante a transição.
+- **Cenário desta revisão (mais provável, dado que a stack foi destruída em 2026-08-30 — Premissa 7):** como nenhuma VPC real existe hoje sob esta stack, o "rollback" da Revisão 6, se necessário, é trivial: `git revert` do commit que trocou a região de `sa-east-1` para `us-east-1`, seguido de novo `terraform plan` (após o `devops-engineer` realinhar o código, Seção 11). Nenhuma infraestrutura é afetada.
+- **Se, após esta revisão, `prd` já tiver sido aplicado em `us-east-1` e for necessário reverter para `sa-east-1` (ou vice-versa):** diferente da mudança de NAT único↔HA, uma mudança de região **força recriação completa** de toda a stack (VPC, sub-redes, IGW, NAT Gateway — nenhum desses recursos pode ser "movido" de região via Terraform). Deve ser tratada como migração de infraestrutura com plano próprio (janela de manutenção, comunicação prévia), nunca como um `apply` incremental.
+- **Se, após esta revisão, `prd` já tiver sido aplicado com NAT único e for necessário reverter para HA (ou vice-versa), dentro da mesma região:** diferente da imutabilidade do `cidr_block`/região (que forçam destroy+create de toda a VPC), a mudança entre NAT único e HA **não** força recriação da VPC nem das sub-redes — apenas cria/destrói o segundo `aws_eip`/`aws_nat_gateway`/`aws_route_table` privado e ajusta a rota correspondente. É um `apply` incremental de baixo risco: bastam as flags `nat_gateway.single_nat_gateway`/`one_nat_gateway_per_az` em `terraform.tfvars` seguidas de `terraform plan`/`apply`. Recomenda-se, ainda assim, executar em janela de baixo tráfego, pois a sub-rede privada cuja tabela de rotas for recriada perde conectividade de egress por alguns segundos durante a transição.
 - **Se `cidr_block` precisar reverter (cenário herdado da Revisão 4, ainda válido):** como `cidr_block` é imutável em `aws_vpc`, esse rollback específico **não é trivial** — força destruição e recriação completas da VPC. Tratar como decisão de migração, não como reversão de configuração.
 - **Após existirem stacks dependentes (compute, dados, etc. usando os outputs desta stack) — cenário futuro, fora do escopo desta revisão:** `terraform destroy` completo **não é seguro**. Qualquer reversão deve ser feita via plano incremental, nunca destruição total.
 - **State:** manter `versioning` habilitado no bucket S3 do backend (fora do escopo, mas pré-requisito) permite recuperar uma versão anterior do `.tfstate`.
-- **Validação pré-rollback:** sempre rodar `terraform plan` antes de qualquer `apply`/`destroy` de correção, prestando atenção especial se o plano indica `# forces replacement` no `aws_vpc` (recriação de toda a rede) versus apenas criação/destruição de `aws_nat_gateway`/`aws_eip`/`aws_route_table` (mudança incremental de baixo risco).
+- **Validação pré-rollback:** sempre rodar `terraform plan` antes de qualquer `apply`/`destroy` de correção, prestando atenção especial se o plano indica `# forces replacement` no `aws_vpc` (recriação de toda a rede, inclusive por mudança de região) versus apenas criação/destruição de `aws_nat_gateway`/`aws_eip`/`aws_route_table` (mudança incremental de baixo risco).
 
 ## 13. Handoff para DevOps Engineer Agent
 
-> **Esta stack já está implementada** em `01-networking-stack-ai/` (não é uma implementação greenfield de código — ver Premissa 7, greenfield apenas de infraestrutura real). Abaixo está o **diff de implementação da Revisão 5**, aplicável sobre o código já existente (que já incorpora o diff da Revisão 4), seguido de uma reconfirmação dos critérios de aceitação e testes relevantes para esta mudança específica.
+> **Esta stack já está implementada** em `01-networking-stack-ai/` (não é uma implementação greenfield de código — ver Premissa 7, greenfield apenas de infraestrutura real). Abaixo está o **diff de implementação da Revisão 5**, aplicável sobre o código já existente (que já incorpora o diff da Revisão 4), seguido de uma reconfirmação dos critérios de aceitação e testes relevantes para esta mudança específica. **A Revisão 6 (mudança de região) não altera este diff** — ela é documentação/decisão apenas; o realinhamento do código `.tf`/`.tfvars.example`/`backend.hcl.example`/`README.md` para `us-east-1` é uma tarefa própria e subsequente do `devops-engineer`, autorizada por este ADR mas não detalhada passo a passo aqui (mesma natureza de mudança já coberta pelos passos 5/6/9/10 abaixo, apenas trocando o valor da região em vez de `dev`/`hml`).
 
 ### 13.1 Ordem de Implementação (respeitando dependências)
 
 > Nenhum bloco `module` deve existir nesta stack (Seção 5) — inalterado.
 
-0. **Pré-checagem obrigatória (Seção 11, risco de imutabilidade do `cidr_block` e de infraestrutura real pré-existente):** rodar `terraform state list` (contra qualquer backend que já tenha sido configurado para `dev`, `hml` ou `prd`) e/ou `aws ec2 describe-vpcs --filters Name=tag:StackName,Values=01-networking-stack-ai` e confirmar que **nenhuma VPC real existe** ainda para esta stack, em nenhum dos três nomes de ambiente anteriores. Se alguma existir, parar e tratar como migração planejada (não prosseguir sem aprovação explícita de uma janela de manutenção).
+0. **Pré-checagem obrigatória (Seção 11, risco de imutabilidade do `cidr_block`/região e de infraestrutura real pré-existente):** rodar `terraform state list` (contra qualquer backend que já tenha sido configurado) e/ou `aws ec2 describe-vpcs --filters Name=tag:StackName,Values=01-networking-stack-ai` (em `us-east-1` **e** em `sa-east-1`, para confirmar que a stack destruída não deixou recursos residuais em nenhuma das duas regiões) e confirmar que **nenhuma VPC real existe** ainda para esta stack. Se alguma existir, parar e tratar como migração planejada (não prosseguir sem aprovação explícita de uma janela de manutenção).
 1. **Remover** os arquivos `01-networking-stack-ai/envs/dev.tfvars` e `01-networking-stack-ai/envs/hml.tfvars` (não versionados, conforme `.gitignore`, mas devem ser apagados do ambiente local de cada engenheiro/pipeline que os possua). Nenhuma infraestrutura associada existe (Premissa 7).
 2. **Mover/renomear** `01-networking-stack-ai/envs/prd.tfvars` (se existir localmente) para `01-networking-stack-ai/terraform.tfvars`, na raiz da stack — mesmo padrão de arquivo único já descrito em `.claude/rules/terraform-naming-conventions.md` (Seção 4.2) para stacks single-environment. Remover o diretório `envs/` por completo (fica vazio). Nenhuma mudança em `.gitignore` é necessária — os padrões `*.tfvars`/`!*.tfvars.example` e `*.hcl`/`!*.hcl.example` já cobrem arquivos na raiz da stack independentemente de subdiretório.
 3. **Editar `01-networking-stack-ai/variables.tf`:** remover integralmente o bloco `variable "environment" { ... }`, incluindo a `validation` com `contains(["dev", "hml", "prd"], var.environment)`.
@@ -332,26 +340,28 @@ Esta stack não gerencia dados stateful (bancos de dados, storage de aplicação
    - remover a linha `environment = "dev"` (a variável não existe mais).
    - manter apenas o bloco `nat_gateway = { enabled = true, single_nat_gateway = true, one_nat_gateway_per_az = false }` como bloco ativo único; o bloco alternativo de HA pode ser mantido **comentado**, rotulado explicitamente como "não utilizado nesta revisão — reversão para HA exige decisão consciente, ver Seção 11 do ADR-0001", em vez de removido, para preservar o caminho de reversão documentado na Seção 12.
    - atualizar o comentário de cabeçalho: "Copie para `terraform.tfvars`" (em vez de "dev.tfvars / hml.tfvars / prd.tfvars").
+   - **(Revisão 6, tarefa subsequente do `devops-engineer`)** atualizar `aws_region = "sa-east-1"` para `aws_region = "us-east-1"` e as AZs de `vpc.availability_zones` (se explicitadas) de `sa-east-1a`/`sa-east-1b` para `us-east-1a`/`us-east-1b`.
 8. **Editar `01-networking-stack-ai/backend.tf`:** atualizar apenas o comentário, trocando as referências a `backend-dev.hcl`, `backend-hml.hcl`, `backend-prd.hcl` por um único `backend.hcl` (sem sufixo de ambiente).
-9. **Editar `01-networking-stack-ai/backend.hcl.example`:** atualizar `key = "01-networking-stack-ai/dev/terraform.tfstate"` para `key = "01-networking-stack-ai/prd/terraform.tfstate"`; atualizar o comentário "Copie para `backend-<env>.hcl`" para "Copie para `backend.hcl`".
-10. **Editar `01-networking-stack-ai/README.md`:** reescrever as seções afetadas — tabela de `envs/*.tfvars` substituída por referência única a `terraform.tfvars`; "Pré-requisitos" sem menção a múltiplos ambientes; "Uso por ambiente" renomeada para "Uso" (ou equivalente), removendo o fluxo de promoção `dev` → `hml` → `prd` e os comandos `-backend-config=backend-dev.hcl`/`-var-file=envs/dev.tfvars`, substituídos por `backend.hcl`/`terraform.tfvars` (sem sufixo — com `terraform.tfvars` na raiz da stack, `-var-file` deixa de ser necessário, pois o Terraform o carrega automaticamente); estatística "dev/hml planejam 22 recursos, prd planeja 26" atualizada para refletir que o único plano de `prd` agora também totaliza ~22 recursos (1 NAT Gateway); bullet de "Pontos de atenção" sobre NAT Gateway único atualizado para descrever a configuração definitiva de `prd` (não mais um "default dev/hml"); adicionar bullet sobre ausência de ambiente inferior de teste (Premissa 16).
+9. **Editar `01-networking-stack-ai/backend.hcl.example`:** atualizar `key = "01-networking-stack-ai/dev/terraform.tfstate"` para `key = "01-networking-stack-ai/prd/terraform.tfstate"`; atualizar o comentário "Copie para `backend-<env>.hcl`" para "Copie para `backend.hcl`". **(Revisão 6)** atualizar também `region = "sa-east-1"` para `region = "us-east-1"`, caso o arquivo fixe a região do bucket de backend.
+10. **Editar `01-networking-stack-ai/README.md`:** reescrever as seções afetadas — tabela de `envs/*.tfvars` substituída por referência única a `terraform.tfvars`; "Pré-requisitos" sem menção a múltiplos ambientes; "Uso por ambiente" renomeada para "Uso" (ou equivalente), removendo o fluxo de promoção `dev` → `hml` → `prd` e os comandos `-backend-config=backend-dev.hcl`/`-var-file=envs/dev.tfvars`, substituídos por `backend.hcl`/`terraform.tfvars` (sem sufixo — com `terraform.tfvars` na raiz da stack, `-var-file` deixa de ser necessário, pois o Terraform o carrega automaticamente); estatística "dev/hml planejam 22 recursos, prd planeja 26" atualizada para refletir que o único plano de `prd` agora também totaliza ~22 recursos (1 NAT Gateway); bullet de "Pontos de atenção" sobre NAT Gateway único atualizado para descrever a configuração definitiva de `prd` (não mais um "default dev/hml"); adicionar bullet sobre ausência de ambiente inferior de teste (Premissa 16). **(Revisão 6, tarefa subsequente)** atualizar toda referência a `sa-east-1`/AZs para `us-east-1`/`us-east-1a`/`us-east-1b`.
 11. Rodar `terraform fmt -check` e `terraform validate` em `01-networking-stack-ai/`.
 12. Rodar `terraform plan` (sem `-var-file`, já que `terraform.tfvars` na raiz é carregado automaticamente pelo Terraform) e conferir, na saída, que:
     - nenhum atributo de `variable "environment"` é solicitado interativamente (confirma que a remoção da variável foi bem-sucedida);
     - as tags `Environment = "prd"` aparecem corretamente nos recursos planejados;
-    - o plano contém **exatamente 1** `aws_eip`, **1** `aws_nat_gateway` e **1** `aws_route_table` do tipo privado (confirma que a mudança de HA→único foi aplicada corretamente para o único ambiente).
+    - o plano contém **exatamente 1** `aws_eip`, **1** `aws_nat_gateway` e **1** `aws_route_table` do tipo privado (confirma que a mudança de HA→único foi aplicada corretamente para o único ambiente);
+    - **(Revisão 6)** os recursos são planejados em `us-east-1`, nas AZs `us-east-1a`/`us-east-1b`, com nomes lógicos usando o segmento `us-east-1`.
 13. Submeter o `plan` à revisão por pares — **crítico nesta revisão**, dado que não há mais `dev`/`hml` para absorver um eventual erro de configuração antes de impactar `prd` diretamente (Premissa 16). O revisor deve confirmar explicitamente a contagem de recursos do passo 12.
 14. Aplicar somente após a revisão do passo 13, validando em seguida os critérios de aceitação (13.3) e os testes pós-deploy (13.4).
 
 ### 13.2 Variáveis de Input Esperadas
 
-> Tabela ajustada nesta revisão: a linha `environment` é **removida** (deixa de ser uma variável de input — Seção 4/5, decisão D2). Nenhuma outra variável muda de forma.
+> Tabela ajustada nesta revisão: a linha `environment` é **removida** (deixa de ser uma variável de input — Seção 4/5, decisão D2). **(Revisão 6)** valor de `aws_region` atualizado para `"us-east-1"`.
 
 | Variável | Tipo | Descrição |
 |---|---|---|
-| `aws_region` | `string` | Região AWS onde a stack é aplicada (`"sa-east-1"`). |
+| `aws_region` | `string` | Região AWS onde a stack é aplicada (`"us-east-1"`). |
 | `project_name` | `string` | Nome lógico do projeto (`"networking"`). |
-| `vpc` | `object({ cidr = string, availability_zones = list(string) })` | `vpc.cidr = "10.0.0.0/24"` (Revisão 4). `vpc.availability_zones`: lista vazia resolve dinamicamente as 2 primeiras AZs disponíveis — inalterado. |
+| `vpc` | `object({ cidr = string, availability_zones = list(string) })` | `vpc.cidr = "10.0.0.0/24"` (Revisão 4). `vpc.availability_zones`: lista vazia resolve dinamicamente as 2 primeiras AZs disponíveis (`us-east-1a`, `us-east-1b` em `us-east-1` — Revisão 6) — inalterado. |
 | `nat_gateway` | `object({ enabled = bool, single_nat_gateway = bool, one_nat_gateway_per_az = bool })` | **(Revisão 5)** Único valor suportado em `terraform.tfvars`: `single_nat_gateway = true`, `one_nat_gateway_per_az = false` — configuração definitiva de `prd` (Premissa 14). |
 | `flow_logs` | `object({ enabled = bool, retention_days = number })` | Configuração de VPC Flow Logs — inalterado. |
 | `tags` | `map(string)` | Tags adicionais além das obrigatórias — inalterado. |
@@ -360,16 +370,17 @@ Esta stack não gerencia dados stateful (bancos de dados, storage de aplicação
 
 ### 13.3 Critérios de Aceitação (Definition of Done)
 
-- [ ] Pré-checagem do passo 0 da Seção 13.1 executada e documentada (nenhuma VPC real pré-existente para esta stack em nenhum dos três nomes de ambiente anteriores).
+- [ ] Pré-checagem do passo 0 da Seção 13.1 executada e documentada (nenhuma VPC real pré-existente para esta stack em nenhum dos três nomes de ambiente anteriores, em nenhuma das duas regiões — `us-east-1` e `sa-east-1`).
 - [ ] `01-networking-stack-ai/envs/dev.tfvars` e `01-networking-stack-ai/envs/hml.tfvars` removidos; diretório `envs/` não existe mais.
-- [ ] `01-networking-stack-ai/terraform.tfvars` existe na raiz da stack (não versionado), com `nat_gateway = { enabled = true, single_nat_gateway = true, one_nat_gateway_per_az = false }`.
+- [ ] `01-networking-stack-ai/terraform.tfvars` existe na raiz da stack (não versionado), com `nat_gateway = { enabled = true, single_nat_gateway = true, one_nat_gateway_per_az = false }` e `aws_region = "us-east-1"`.
 - [ ] `variables.tf` **não** contém mais `variable "environment"`.
 - [ ] `locals.tf` contém `local.environment = "prd"` e `local.name`/`common_tags.Environment` referenciam `local.environment` (não mais `var.environment`).
-- [ ] Comentários em `vpc.nat-gateway.tf`, `vpc.route-tables.tf`, `backend.tf`, `terraform.tfvars.example` e `backend.hcl.example` sem nenhuma referência remanescente a `dev`/`hml`.
-- [ ] `README.md` da stack sem nenhuma referência remanescente a `envs/`, `dev`, `hml`, `backend-dev.hcl`/`backend-hml.hcl`/`backend-prd.hcl` ou fluxo de promoção entre ambientes.
+- [ ] Comentários em `vpc.nat-gateway.tf`, `vpc.route-tables.tf`, `backend.tf`, `terraform.tfvars.example` e `backend.hcl.example` sem nenhuma referência remanescente a `dev`/`hml` nem a `sa-east-1`.
+- [ ] `README.md` da stack sem nenhuma referência remanescente a `envs/`, `dev`, `hml`, `backend-dev.hcl`/`backend-hml.hcl`/`backend-prd.hcl`, fluxo de promoção entre ambientes, ou `sa-east-1`.
 - [ ] `terraform validate` e `terraform fmt -check` passam sem erros.
 - [ ] `terraform plan` executa **sem** solicitar valor para `environment` (variável não existe mais) e mostra as tags `Environment = "prd"` corretamente aplicadas.
 - [ ] `terraform plan` mostra exatamente **1** `aws_eip`, **1** `aws_nat_gateway` e **1** `aws_route_table` privada (confirma NAT único, não HA) — revisado explicitamente por um par (Seção 13.1, passo 13).
+- [ ] `terraform plan` mostra os recursos em `us-east-1`, nas AZs `us-east-1a`/`us-east-1b`, com nomes lógicos usando o segmento `us-east-1` (Revisão 6).
 - [ ] Nenhum Security Group ou NACL desta stack permite entrada irrestrita (`0.0.0.0/0`) não justificada — inalterado, revalidar por precaução.
 - [ ] VPC Flow Logs ativos e entregando logs ao CloudWatch Logs — inalterado, revalidar por precaução.
 - [ ] Tags obrigatórias (Seção 9) aplicadas em 100% dos recursos, com `Environment = "prd"`.
@@ -379,12 +390,12 @@ Esta stack não gerencia dados stateful (bancos de dados, storage de aplicação
 
 ### 13.4 Testes de Validação Pós-Deploy
 
-- Confirmar via `aws ec2 describe-vpcs --filters Name=cidr,Values=10.0.0.0/24` que a VPC foi criada com o CIDR correto e está em estado `available`.
-- Confirmar via `aws ec2 describe-subnets` que as 4 sub-redes existem, com os CIDRs `/26` exatos e nas AZs corretas.
-- Confirmar via `aws ec2 describe-nat-gateways --filter Name=vpc-id,Values=<vpc_id>` que existe **exatamente 1** NAT Gateway, em estado `available`, associado à sub-rede pública `10.0.0.0/26` — **não 2**.
-- Confirmar via `aws ec2 describe-route-tables` que a rota default da sub-rede privada de AZ2 (`10.0.0.192/26`) também aponta para o NAT Gateway único da AZ1 (rota cross-AZ), não para um segundo NAT Gateway inexistente.
-- Confirmar via `aws logs describe-log-groups`/`describe-log-streams` que os VPC Flow Logs continuam sendo entregues ativamente ao CloudWatch Logs.
-- Confirmar via `aws resourcegroupstaggingapi get-resources` (ou equivalente) que 100% dos recursos da stack têm a tag `Environment = prd`.
+- Confirmar via `aws ec2 describe-vpcs --region us-east-1 --filters Name=cidr,Values=10.0.0.0/24` que a VPC foi criada com o CIDR correto e está em estado `available`.
+- Confirmar via `aws ec2 describe-subnets --region us-east-1` que as 4 sub-redes existem, com os CIDRs `/26` exatos e nas AZs `us-east-1a`/`us-east-1b`.
+- Confirmar via `aws ec2 describe-nat-gateways --region us-east-1 --filter Name=vpc-id,Values=<vpc_id>` que existe **exatamente 1** NAT Gateway, em estado `available`, associado à sub-rede pública `10.0.0.0/26` — **não 2**.
+- Confirmar via `aws ec2 describe-route-tables --region us-east-1` que a rota default da sub-rede privada de AZ2 (`10.0.0.192/26`) também aponta para o NAT Gateway único da AZ1 (rota cross-AZ), não para um segundo NAT Gateway inexistente.
+- Confirmar via `aws logs describe-log-groups`/`describe-log-streams` (`--region us-east-1`) que os VPC Flow Logs continuam sendo entregues ativamente ao CloudWatch Logs.
+- Confirmar via `aws resourcegroupstaggingapi get-resources --region us-east-1` (ou equivalente) que 100% dos recursos da stack têm a tag `Environment = prd`.
 - Rodar `terraform plan` após o `apply` e confirmar saída "No changes" (sem drift).
 - Validar (fora do Terraform, operacional) que o alarme CloudWatch de saúde do NAT Gateway recomendado na Seção 11 foi de fato configurado antes de considerar o risco de SPOF como "mitigado por monitoramento".
 
@@ -395,13 +406,15 @@ Esta stack não gerencia dados stateful (bancos de dados, storage de aplicação
 - **VPC Peering, Transit Gateway ou VPN Site-to-Site** — deve ser avaliado em ADR específico, considerando o risco de sobreposição de CIDR (`10.0.0.0/8`, Seção 11).
 - **DNS privado** (Route 53 Private Hosted Zone) e **VPC Interface/Gateway Endpoints** — recomendado para uma iteração futura; exigirão CIDR IPv4 secundário associado à VPC. Inalterado.
 - **AWS Network Firewall / AWS WAF** — não incluídos nesta fundação de rede. Inalterado.
-- **Multi-região e Disaster Recovery** — não solicitados; esta stack cobre apenas `sa-east-1`. Inalterado.
+- **Multi-região e Disaster Recovery** — não solicitados; esta stack cobre apenas `us-east-1` (Revisão 6). Inalterado quanto ao escopo (segue cobrindo uma única região).
 - Definição de controles específicos de **compliance regulatório** — nenhum framework foi indicado. Inalterado.
 - Configuração de **NACLs dedicadas** por sub-rede — mantém-se a Default Network ACL. Inalterado.
 - Uso de qualquer módulo Terraform de terceiros/comunidade nesta stack. Inalterado.
 - **(Nova — Revisão 5) Reintrodução de múltiplos ambientes (`dev`/`hml` ou quaisquer outros):** fora do escopo desta revisão, que remove deliberadamente essa capacidade (Seção 4, decisão D2). Se voltar a ser necessária, deve ser tratada em nova revisão/ADR, redesenhando a parametrização de `environment` desde o início.
 - **(Nova — Revisão 5) Reversão para HA de NAT Gateway em `prd`:** o caminho de código para reabilitar HA (`one_nat_gateway_per_az = true`) é preservado (Seção 11/12), mas ativá-lo está fora do escopo desta revisão — exigiria nova decisão consciente do solicitante e, dependendo do estado da infraestrutura real no momento, poderia ser tratado como Non-goal a resolver em revisão futura dedicada.
 - **(Novo — Revisão 4, mantido) Ambiente de sandbox/pré-produção dedicado para validação de mudanças de rede** — mencionado como mitigação recomendada do risco da Premissa 16 (Seção 11), mas seu provisionamento está fora do escopo desta revisão.
+- **(Nova — Revisão 6) Realinhamento do código Terraform (`.tf`/`.tfvars.example`/`backend.hcl.example`/`README.md`) para `us-east-1`:** esta revisão altera apenas o ADR (documentação/decisão); a execução do realinhamento de código é uma tarefa própria do `devops-engineer`, fora do escopo de implementação desta revisão específica do `aws-architect` (que não edita `.tf`/`README.md`).
+- **(Nova — Revisão 6) Reavaliação de qualquer outra decisão arquitetural em função da nova região** (ex.: reconsiderar CIDR, contagem de AZs, estratégia de NAT à luz de `us-east-1`) — explicitamente fora do escopo; esta revisão troca apenas a região e os valores diretamente derivados dela.
 
 ## 15. Referências
 
@@ -416,3 +429,5 @@ Esta stack não gerencia dados stateful (bancos de dados, storage de aplicação
 - [Recurso `aws_nat_gateway` (registry)](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/nat_gateway)
 - [Recurso `aws_flow_log` (registry)](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/flow_log)
 - [`.claude/rules/terraform-naming-conventions.md`](../../.claude/rules/terraform-naming-conventions.md) — Seção 4.2, referência ao padrão de `terraform.tfvars` único na raiz para stacks single-environment, adotado na Revisão 5.
+- [Amazon EC2 — AWS Regions and Availability Zones (us-east-1: 6 AZs, validado via `aws-mcp`/`ec2:DescribeAvailabilityZones` em 2026-08-30)](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-regions-availability-zones.html) — base da Premissa 3/Revisão 6.
+- [AWS NAT Gateway pricing](https://aws.amazon.com/vpc/pricing/) — base do recálculo de custo para `us-east-1` na Seção 10/Revisão 6.

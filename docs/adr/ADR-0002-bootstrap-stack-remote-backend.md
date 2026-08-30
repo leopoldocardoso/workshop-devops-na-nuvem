@@ -5,7 +5,10 @@
 - **Autor:** Planner Agent
 - **Supersedes:** N/A
 - **Ambiente:** `prd` (ambiente único do projeto — herdado do ADR-0001 Revisão 5; não há `dev`/`hml` em nenhuma stack deste repositório)
-- **Região AWS:** `sa-east-1` (São Paulo) — mesma conta/região do ADR-0001
+- **Região AWS:** `us-east-1` (N. Virginia) — região padrão do projeto para novos ADRs a partir de 2026-08-30; aplicada retroativamente a esta stack na Revisão 1 (ver Seção 3 e histórico de revisões abaixo)
+- **Histórico de revisões:**
+  - `2026-08-01` — Versão inicial: decisão de provisionar `00-bootstrap-stack-ai` (bucket S3 versionado/criptografado, sem acesso público, com backend local permanente) para desbloquear o backend remoto de `01-networking-stack-ai`, na mesma conta/região então vigente (`sa-east-1`).
+  - `2026-08-30` — **Revisão 1 (mudança de região — `sa-east-1` → `us-east-1`):** a região primária desta stack é alterada de `sa-east-1` (São Paulo) para `us-east-1` (N. Virginia), em conformidade com a nova região padrão do projeto para todo ADR a partir de 2026-08-30 (`CLAUDE.md`), aplicada retroativamente a este documento a pedido explícito do solicitante — **não** é uma reavaliação arquitetural, apenas a adoção do novo padrão de região do repositório, feita em conjunto com a mesma mudança no ADR-0001 (rede) e no ADR-0003 (EKS), das quais esta stack de bootstrap é pré-requisito comum. Alterado em todo o documento: metadados de cabeçalho, Premissa 2, Seção 2 (Drivers), diagrama Mermaid (Seção 6.1), tabela de Recursos AWS (Seção 6.2, incluindo o nome do bucket que embute o segmento `{region}`, ex.: `prd-bootstrap-tfstate-{account_id}-sa-east-1` → `prd-bootstrap-tfstate-{account_id}-us-east-1`), Naming Convention (Seção 9) e estimativa de custo (Seção 10). Estimativa de custo recalculada para `us-east-1`: armazenamento S3 Standard ~43% mais barato nesta região (`US$ 0,023`/GB vs. `US$ 0,0405`/GB em `sa-east-1`, validado via pesquisa de pricing pública), sem alterar a ordem de grandeza total (~USD 1–3/mês), dado o volume de dados extremamente baixo desta stack. **Nenhum recurso real existe hoje sob `sa-east-1` para esta stack** — o `terraform destroy` real já foi executado em 2026-08-30 (ver `docs/deployments/00-bootstrap-stack-ai.md`, status "STACK DESTRUÍDA"); esta revisão é, portanto, uma correção de documentação/decisão arquitetural antes de um futuro re-apply, **não** uma migração de infraestrutura viva. Nenhuma decisão de estrutura de código, criptografia, estratégia de nome de bucket ou backend próprio (D1/D2/D3, Seção 4) foi alterada por esta revisão. **Nota para o `devops-engineer`:** o código Terraform (`.tf`) desta stack não foi tocado por esta revisão (fora do escopo do `aws-architect`) e ainda referencia `sa-east-1`; deve ser realinhado a este ADR antes de qualquer novo `apply` — o que também é pré-requisito para o realinhamento equivalente do ADR-0001 e do ADR-0003.
 
 ---
 
@@ -43,7 +46,7 @@ Este ADR fecha exatamente essa lacuna: define a arquitetura de uma nova stack, `
 
 **Requisitos não funcionais**
 - Durabilidade/disponibilidade: herdadas do SLA nativo do S3 (11 noves de durabilidade, standard); nenhum requisito adicional de RTO/RPO foi informado.
-- Sem requisito de multi-região/DR para o backend (alinhado à Premissa 2 do ADR-0001 — esta stack cobre apenas `sa-east-1`, mesma conta/região da stack de rede).
+- Sem requisito de multi-região/DR para o backend (alinhado à Premissa 2 do ADR-0001 — esta stack cobre apenas `us-east-1`, mesma conta/região da stack de rede — atualizado na Revisão 1; até então cobria `sa-east-1`).
 
 **Restrições**
 - Não pode introduzir dependência circular: esta stack usa backend **local** (`override.tf`), permanentemente — nunca migra o próprio state para o bucket que ela cria (ver Seção 4, decisão D3).
@@ -58,10 +61,10 @@ Este ADR fecha exatamente essa lacuna: define a arquitetura de uma nova stack, `
 ## 3. Premissas (Assumptions)
 
 1. **Ambiente:** `prd`, único ambiente do projeto (não apenas de `01-`) — não há `dev`/`hml` em nenhuma stack deste repositório desde o ADR-0001 Revisão 5. Esta stack de bootstrap adota o mesmo padrão: sem `variable "environment"`, `local.environment = "prd"` fixo.
-2. **Região:** `sa-east-1`, mesma conta e região do ADR-0001. Sem requisito de bucket compartilhado entre múltiplas contas/regiões (Premissa 6).
+2. **Região (Revisado na Revisão 1):** `us-east-1` — região padrão do projeto para todo novo ADR a partir de 2026-08-30 (`CLAUDE.md`), aplicada retroativamente a esta stack a pedido explícito do solicitante, substituindo `sa-east-1`, mesma conta/região do ADR-0001 até a Revisão 5 deste último. Sem requisito de bucket compartilhado entre múltiplas contas/regiões (Premissa 6).
 3. **Compliance:** nenhum framework informado — herdado da Premissa 5 do ADR-0001.
 4. **Budget:** sensibilidade a custo assumida (herdado); o custo desta stack é, na prática, marginal (Seção 10).
-5. **Estado atual:** greenfield — o bucket ainda não existe (confirmado pelo comentário em `01-networking-stack-ai/backend.tf`, "Pre-requisito (bloqueante): o bucket S3 do backend... precisa existir previamente").
+5. **Estado atual:** greenfield — o bucket ainda não existe (confirmado pelo comentário em `01-networking-stack-ai/backend.tf`, "Pre-requisito (bloqueante): o bucket S3 do backend... precisa existir previamente"). **(Nota — Revisão 1)** esta premissa segue válida e, adicionalmente, a stack foi de fato aplicada e depois **destruída** (`terraform destroy` real, 2026-08-30) sob `sa-east-1` antes desta revisão de região — ver `docs/deployments/00-bootstrap-stack-ai.md`. Não há, portanto, nenhum recurso real hoje sob a região antiga.
 6. **Uma única conta AWS:** assume-se que todas as stacks deste repositório rodam na mesma conta AWS. Um bucket compartilhado entre contas está fora de escopo (Seção 14).
 7. **Estratégia de criptografia:** escolhido SSE-S3 (`AES256`, chave gerenciada pela AWS) em vez de SSE-KMS com CMK dedicada, por não haver requisito de compliance que exija auditoria/rotação de chave via KMS nesta fase — decisão revisável se um framework de compliance for introduzido futuramente (ver Seção 4, decisão D1).
 8. **Estratégia de nome do bucket:** nome derivado deterministicamente via `data.aws_caller_identity` (account ID) + região + convenção de naming do projeto, em vez de sufixo aleatório (evita depender do provider `hashicorp/random`, mantendo a stack apenas com recursos nativos `hashicorp/aws` — ver Seção 4, decisão D2).
@@ -71,6 +74,7 @@ Este ADR fecha exatamente essa lacuna: define a arquitetura de uma nova stack, `
 12. **Sem DR/replicação cross-region** para o bucket de state, alinhado à ausência de requisito de multi-região do ADR-0001.
 13. **Tags `Owner`/`CostCenter`:** ainda não definidas pelo solicitante; usam os mesmos placeholders `"AJUSTAR-..."` já em uso em `01-networking-stack-ai/terraform.tfvars.example`.
 14. **Migração do backend de `01-networking-stack-ai` para o bucket criado aqui é uma ação subsequente, fora do escopo desta ADR** (Seção 14) — este documento cobre apenas a criação do bucket, não a remoção do `override.tf` de `01-` nem o `terraform init -migrate-state` correspondente.
+15. **(Nova — Revisão 1) Mudança de região é puramente de padronização de repositório, não uma decisão arquitetural nova:** `us-east-1` passa a ser a região padrão de todo novo ADR deste repositório a partir de 2026-08-30 (`CLAUDE.md`); esta revisão aplica esse padrão retroativamente a este documento, a pedido explícito do solicitante, sem reabrir nenhuma outra decisão arquitetural (estrutura de código, criptografia D1, estratégia de nome D2, backend próprio D3).
 
 ## 4. Opções Consideradas
 
@@ -116,7 +120,7 @@ Este ADR fecha exatamente essa lacuna: define a arquitetura de uma nova stack, `
 
 #### Opção A — Nome derivado do Account ID via `data.aws_caller_identity` *(ESCOLHIDA)*
 
-- **Descrição:** `bucket = "${local.name}-tfstate-${data.aws_caller_identity.current.account_id}-${var.aws_region}"`, ex.: `prd-bootstrap-tfstate-123456789012-sa-east-1`.
+- **Descrição:** `bucket = "${local.name}-tfstate-${data.aws_caller_identity.current.account_id}-${var.aws_region}"`, ex.: `prd-bootstrap-tfstate-123456789012-us-east-1` (atualizado na Revisão 1 — antes `...-sa-east-1`).
 - **Prós:** determinístico e idempotente — o mesmo `terraform plan`, rodado por qualquer engenheiro na mesma conta, resolve para o mesmo nome, sem estado externo adicional a rastrear; usa apenas recursos/data sources nativos do provider `hashicorp/aws` (nenhum provider adicional); Account ID já é, por construção, globalmente único por conta AWS — elimina colisão de nome sem necessidade de aleatoriedade.
 - **Contras:** expõe o Account ID no nome do bucket (baixo risco — Account IDs não são segredos, mas alguns times preferem não expô-los em nomes de recursos publicamente referenciáveis, ainda que o bucket em si não seja público).
 - **Custo estimado:** USD 0 adicional.
@@ -156,6 +160,8 @@ Este ADR fecha exatamente essa lacuna: define a arquitetura de uma nova stack, `
 
 Justificativa consolidada, referenciando os drivers da Seção 2: o bucket resultante satisfaz literalmente os pré-requisitos já documentados no `backend.tf` de `01-networking-stack-ai` (versionamento + SSE), sem acesso público, com política restritiva e lifecycle de custo — habilitando o `terraform init -backend-config=backend.hcl` de `01-` (e de stacks futuras) a funcionar sem qualquer alteração no `backend.tf` já escrito.
 
+**Decisão da Revisão 1 (mudança de região):** adotado `us-east-1` como região primária, em substituição a `sa-east-1`, por conformidade com a nova região padrão do projeto para todo ADR a partir de 2026-08-30, aplicada retroativamente a pedido do solicitante — decisão de padronização de repositório, não uma reavaliação técnica. Nenhuma outra decisão arquitetural (D1/D2/D3) é reaberta.
+
 ## 6. Arquitetura Proposta
 
 ### 6.1 Diagrama
@@ -166,7 +172,7 @@ flowchart LR
     CallerIdentity["data.aws_caller_identity\n(account_id)"]
 
     subgraph Bootstrap["00-bootstrap-stack-ai (backend local permanente)"]
-        Bucket["S3 Bucket\nprd-bootstrap-tfstate-{account_id}-sa-east-1"]
+        Bucket["S3 Bucket\nprd-bootstrap-tfstate-{account_id}-us-east-1"]
         Ownership["Ownership Controls\n(BucketOwnerEnforced)"]
         Versioning["Versioning\n(Enabled)"]
         SSE["SSE-S3 (AES256)\nDefault Encryption"]
@@ -190,22 +196,24 @@ flowchart LR
     FutureStacks -- "mesmo padrao (state read/write)" --> Bucket
 ```
 
-> Diagrama editável equivalente, com fluxo "vivo" (setas animadas), gerado em `docs/diagramas/ADR-0002-bootstrap-stack-remote-backend.drawio` — ver seção **DIAGRAMA DRAW.IO**.
+> Diagrama editável equivalente, com fluxo "vivo" (setas animadas), gerado em `docs/diagramas/ADR-0002-bootstrap-stack-remote-backend.drawio` — ver seção **DIAGRAMA DRAW.IO**. **Atualizado na Revisão 1:** o segmento `{region}` do nome do bucket foi atualizado de `sa-east-1` para `us-east-1`.
 
 > Nota: `01-networking-stack-ai` e "Stacks futuras" representam **consumo** do backend criado aqui, não recursos AWS provisionados por esta ADR — incluídos no diagrama para deixar explícito o fluxo de dependência que motiva a existência desta stack (Seção 1).
 
 ### 6.2 Recursos AWS
 
+> **Tabela atualizada na Revisão 1:** coluna Região e segmento `{region}` do nome do bucket atualizados de `sa-east-1` para `us-east-1`.
+
 | Recurso | Tipo (Terraform) | Nome lógico | Região | Observações |
 |---|---|---|---|---|
-| Account ID atual | `data.aws_caller_identity` | `current` | sa-east-1 | Resolve `account_id`, usado para compor o nome globalmente único do bucket (Seção 4, D2). |
-| Bucket S3 de state | `aws_s3_bucket` | `this` | sa-east-1 | `bucket = "prd-bootstrap-tfstate-{account_id}-sa-east-1"`. `force_destroy = false` (Seção 11). |
-| Ownership Controls | `aws_s3_bucket_ownership_controls` | `this` | sa-east-1 | `object_ownership = "BucketOwnerEnforced"` — desabilita ACLs por completo (endurece o controle de acesso além do Public Access Block). |
-| Versionamento | `aws_s3_bucket_versioning` | `this` | sa-east-1 | `status = "Enabled"` — pré-requisito explícito do `backend.tf` de `01-`; base da estratégia de rollback de state (ADR-0001 Seção 12). |
-| Criptografia padrão | `aws_s3_bucket_server_side_encryption_configuration` | `this` | sa-east-1 | `sse_algorithm = "AES256"` (SSE-S3) — Decisão D1. |
-| Bloqueio de acesso público | `aws_s3_bucket_public_access_block` | `this` | sa-east-1 | `block_public_acls`, `block_public_policy`, `ignore_public_acls`, `restrict_public_buckets` = `true` (todos). |
-| Política do bucket | `aws_s3_bucket_policy` | `this` | sa-east-1 | Via `data.aws_iam_policy_document`: nega tráfego sem TLS (`aws:SecureTransport = false`), nega `PutObject` sem `AES256` no header de SSE, nega ação a principals fora da conta AWS atual (`aws:PrincipalAccount`). |
-| Lifecycle | `aws_s3_bucket_lifecycle_configuration` | `this` | sa-east-1 | `noncurrent_version_expiration` (expira versões não-atuais após N dias, retendo um mínimo de versões recentes) + `abort_incomplete_multipart_upload` (limpa uploads incompletos). Ver Seção 6.3/13.2 para os valores parametrizados. |
+| Account ID atual | `data.aws_caller_identity` | `current` | us-east-1 | Resolve `account_id`, usado para compor o nome globalmente único do bucket (Seção 4, D2). |
+| Bucket S3 de state | `aws_s3_bucket` | `this` | us-east-1 | `bucket = "prd-bootstrap-tfstate-{account_id}-us-east-1"`. `force_destroy = false` (Seção 11). |
+| Ownership Controls | `aws_s3_bucket_ownership_controls` | `this` | us-east-1 | `object_ownership = "BucketOwnerEnforced"` — desabilita ACLs por completo (endurece o controle de acesso além do Public Access Block). |
+| Versionamento | `aws_s3_bucket_versioning` | `this` | us-east-1 | `status = "Enabled"` — pré-requisito explícito do `backend.tf` de `01-`; base da estratégia de rollback de state (ADR-0001 Seção 12). |
+| Criptografia padrão | `aws_s3_bucket_server_side_encryption_configuration` | `this` | us-east-1 | `sse_algorithm = "AES256"` (SSE-S3) — Decisão D1. |
+| Bloqueio de acesso público | `aws_s3_bucket_public_access_block` | `this` | us-east-1 | `block_public_acls`, `block_public_policy`, `ignore_public_acls`, `restrict_public_buckets` = `true` (todos). |
+| Política do bucket | `aws_s3_bucket_policy` | `this` | us-east-1 | Via `data.aws_iam_policy_document`: nega tráfego sem TLS (`aws:SecureTransport = false`), nega `PutObject` sem `AES256` no header de SSE, nega ação a principals fora da conta AWS atual (`aws:PrincipalAccount`). |
+| Lifecycle | `aws_s3_bucket_lifecycle_configuration` | `this` | us-east-1 | `noncurrent_version_expiration` (expira versões não-atuais após N dias, retendo um mínimo de versões recentes) + `abort_incomplete_multipart_upload` (limpa uploads incompletos). Ver Seção 6.3/13.2 para os valores parametrizados. |
 
 ### 6.3 Módulos Terraform Recomendados
 
@@ -224,7 +232,7 @@ flowchart LR
 | **Security** | Bloqueio total de acesso público (`aws_s3_bucket_public_access_block`, 4 flags); `BucketOwnerEnforced` desabilita ACLs; bucket policy nega tráfego sem TLS e uploads sem SSE; SSE-S3 habilitado por padrão em todos os objetos; nenhum princípio de menor privilégio violado (política apenas nega, não concede acesso amplo). |
 | **Reliability** | Versionamento habilitado protege contra sobrescrita/corrupção acidental de qualquer `.tfstate` armazenado no bucket (recuperável via versão anterior do objeto); `force_destroy = false` previne destruição acidental do bucket e de todo o histórico de state nele contido. Trade-off aceito e documentado: o state **desta própria stack** de bootstrap não tem essa proteção, por design (D3, Seção 11). |
 | **Performance Efficiency** | S3 oferece latência de leitura/escrita adequada para objetos pequenos como `.tfstate` (tipicamente KB a poucos MB); nenhum ajuste de performance é necessário para este caso de uso. |
-| **Cost Optimization** | SSE-S3 em vez de SSE-KMS evita custo de CMK/chamadas KMS sem requisito de compliance que o justifique (D1); lifecycle expira versões antigas de state após um período configurável, controlando o crescimento de custo de armazenamento ao longo do tempo sem comprometer a janela de rollback recente. Custo total estimado é marginal (Seção 10). |
+| **Cost Optimization** | SSE-S3 em vez de SSE-KMS evita custo de CMK/chamadas KMS sem requisito de compliance que o justifique (D1); lifecycle expira versões antigas de state após um período configurável, controlando o crescimento de custo de armazenamento ao longo do tempo sem comprometer a janela de rollback recente. Custo total estimado é marginal (Seção 10) e, na Revisão 1, ligeiramente menor ainda em `us-east-1` (armazenamento S3 ~43% mais barato que em `sa-east-1`). |
 | **Sustainability** | Footprint mínimo de recursos (um bucket S3 e suas configurações, sem compute, sem NAT, sem serviços gerenciados adicionais); lifecycle de expiração de versões antigas reduz o volume de dados armazenados indefinidamente. |
 
 ## 8. Segurança
@@ -239,7 +247,7 @@ flowchart LR
 
 ## 9. Naming Convention & Tagging
 
-- **Padrão de nomes (identificadores lógicos):** mesmo padrão do ADR-0001, `{env}-{project_name}-{service}-{region}` (ex.: `prd-bootstrap-tfstate-sa-east-1` seria o nome "base"). **Extensão específica para o nome do bucket S3:** como nomes de bucket precisam ser globalmente únicos (não apenas únicos dentro da conta/região, ao contrário dos demais recursos cobertos pela convenção-base), o padrão é estendido com o segmento `{account_id}`: `{env}-{project_name}-{service}-{account_id}-{region}` → `prd-bootstrap-tfstate-{account_id}-sa-east-1` (Seção 4, D2). Os demais recursos desta stack (que não exigem unicidade global) seguem a convenção-base sem esse segmento.
+- **Padrão de nomes (identificadores lógicos):** mesmo padrão do ADR-0001, `{env}-{project_name}-{service}-{region}` (ex.: `prd-bootstrap-tfstate-us-east-1` seria o nome "base" — atualizado na Revisão 1, antes `prd-bootstrap-tfstate-sa-east-1`). **Extensão específica para o nome do bucket S3:** como nomes de bucket precisam ser globalmente únicos (não apenas únicos dentro da conta/região, ao contrário dos demais recursos cobertos pela convenção-base), o padrão é estendido com o segmento `{account_id}`: `{env}-{project_name}-{service}-{account_id}-{region}` → `prd-bootstrap-tfstate-{account_id}-us-east-1` (Seção 4, D2). Os demais recursos desta stack (que não exigem unicidade global) seguem a convenção-base sem esse segmento.
 - `project_name` desta stack: `"bootstrap"`.
 - **Tags obrigatórias:**
   - `Environment` = `"prd"` (fixo, mesmo padrão do ADR-0001 Revisão 5 — ver Premissa 1)
@@ -252,17 +260,17 @@ flowchart LR
 
 ## 10. Custo Estimado
 
-Estimativa em ordem de grandeza para `sa-east-1`. Volume de dados extremamente baixo — arquivos `.tfstate` tipicamente variam de poucos KB a poucos MB, mesmo somando o histórico de versões de todas as stacks do repositório.
+Estimativa em ordem de grandeza para `us-east-1` (Revisão 1 — anteriormente calculada para `sa-east-1`, ver histórico de revisões). Volume de dados extremamente baixo — arquivos `.tfstate` tipicamente variam de poucos KB a poucos MB, mesmo somando o histórico de versões de todas as stacks do repositório.
 
 | Item | Modelo de pricing | Estimativa mensal (USD) |
 |---|---|---|
-| Armazenamento S3 Standard (state atual + versões não-expiradas, estimado < 1 GB total mesmo com múltiplas stacks) | On-demand por GB | ~0,05–0,50 |
+| Armazenamento S3 Standard (state atual + versões não-expiradas, estimado < 1 GB total mesmo com múltiplas stacks) | On-demand por GB | ~0,03–0,30 (recalculado para `us-east-1`, `US$ 0,023`/GB vs. `US$ 0,0405`/GB em `sa-east-1` — ~43% mais barato) |
 | Requisições PUT/GET/LIST (`terraform init`/`plan`/`apply` de todas as stacks, baixo volume) | On-demand por 1.000 requisições | ~0,50–1,50 |
 | Public Access Block, Bucket Policy, Ownership Controls, Lifecycle | Sem custo adicional | 0 |
 | Versionamento (custo embutido no armazenamento acima) | — | 0 (incluído) |
 | **Total estimado** | | **~ USD 1–3** |
 
-> Estimativa em ordem de grandeza; validar com Cost Explorer ou AWS Pricing Calculator antes do go-live. Custo marginal frente aos ~USD 55–80/mês de `01-networking-stack-ai` — não é um driver de decisão relevante para esta stack.
+> Estimativa em ordem de grandeza; validar com Cost Explorer ou AWS Pricing Calculator antes do go-live. Custo marginal frente aos ~USD 40–65/mês de `01-networking-stack-ai` (recalculado para `us-east-1` no ADR-0001, Revisão 6) — não é um driver de decisão relevante para esta stack, e a mudança de região não altera essa conclusão.
 
 ## 11. Riscos e Mitigações
 
@@ -275,10 +283,12 @@ Estimativa em ordem de grandeza para `sa-east-1`. Volume de dados extremamente b
 | Ausência de logging/auditoria de acesso ao bucket (Seção 8) | Média | Baixo-Médio (reduz capacidade forense em caso de incidente) | Aceito como gap desta revisão (fora do escopo solicitado); registrado como Non-goal/recomendação futura (Seção 14). |
 | Lifecycle mal calibrado expira versões de state ainda necessárias para rollback | Baixa (parâmetros conservadores propostos — Seção 13.2) | Médio | `noncurrent_version_expiration` combinado com `newer_noncurrent_versions` (retém um número mínimo de versões recentes independentemente da idade) — não expira agressivamente; validar com `terraform plan` antes do `apply` que os parâmetros calibrados fazem sentido para o volume real de mudanças de cada stack consumidora. |
 | Migração futura de `01-networking-stack-ai` para este backend feita sem cuidado (ex.: sem remover `override.tf` corretamente, ou sem `terraform init -migrate-state`) | Média (ação humana subsequente, fora desta ADR) | Alto (pode gerar state duplicado/divergente) | Explicitamente fora do escopo desta ADR (Seção 14) — deve ser tratada como tarefa separada, autorizada e documentada, seguindo o guia oficial de migração de backend do Terraform. |
+| **(Nova — Revisão 1) Código Terraform (`.tf`) ainda referencia `sa-east-1`, desalinhado deste ADR até que o `devops-engineer` o atualize** — esta revisão é documentação/decisão, não implementação (fora do escopo do `aws-architect`) | Alta (é o estado atual conhecido) | Médio (bloqueia apenas um futuro `apply` correto até o realinhamento; nenhum recurso real existe hoje sob a região antiga) | Antes de qualquer novo `apply` desta stack, o `devops-engineer` deve realinhar `.tf`/`.tfvars.example`/`README.md` a este ADR (região, nome do bucket) — tratado como pré-requisito bloqueante, não uma tarefa desta revisão. Esse realinhamento também é pré-requisito para o `01-networking-stack-ai/backend.hcl` (que referencia o bucket criado aqui) apontar para a região correta. |
 
 ## 12. Estratégia de Rollback
 
-- **Cenário mais provável (nenhum `apply` real ainda):** `git revert` da criação da stack `00-bootstrap-stack-ai` e/ou simplesmente não aplicar. Nenhuma infraestrutura é afetada.
+- **Cenário mais provável (stack já destruída, Premissa 5):** como nenhum bucket real existe hoje sob esta stack, o "rollback" da Revisão 1, se necessário, é trivial: `git revert` do commit que trocou a região de `sa-east-1` para `us-east-1`, seguido de novo `terraform plan` (após o `devops-engineer` realinhar o código, Seção 11). Nenhuma infraestrutura é afetada.
+- **Se o bucket já foi recriado em `us-east-1` e for necessário reverter para `sa-east-1` (ou vice-versa):** o nome do bucket embute a região (Seção 9); uma mudança de região força a criação de um bucket com nome diferente — não é uma atualização in-place. Se nenhuma stack consumidora tiver migrado seu backend para o bucket em `us-east-1` ainda, é seguro destruir e recriar (Seção 4/D3, backend local). Se alguma já tiver migrado, tratar como migração de infraestrutura planejada (janela de manutenção, comunicação prévia, `terraform init -migrate-state` coordenado), nunca como reversão simples.
 - **Se o bucket já foi criado, mas nenhuma stack consumidora migrou seu backend para ele ainda:** seguro remover via `terraform destroy` **desta stack** (backend local, Seção 4/D3) — não há dependência downstream real até que `01-networking-stack-ai` (ou outra) tenha efetivamente migrado seu backend (Seção 14, Non-goal).
 - **Se uma ou mais stacks já tiverem migrado seu backend para este bucket:** `terraform destroy` **não é seguro** — destruiria o state necessário para gerenciar essas stacks. Qualquer mudança de configuração do bucket (política, lifecycle, criptografia) deve ser aplicada de forma incremental (nenhum desses atributos força recriação do bucket em si — apenas `bucket`/`bucket_prefix` são "Forces new resource" no `aws_s3_bucket`, e o nome, uma vez em uso por backends reais, **não deve ser alterado**).
 - **Recuperação de uma versão corrompida/sobrescrita de um `.tfstate` específico:** ação manual via console/CLI S3 (`aws s3api list-object-versions` + `aws s3api get-object --version-id`), restaurando a versão anterior do objeto — não é uma operação Terraform.
@@ -286,11 +296,11 @@ Estimativa em ordem de grandeza para `sa-east-1`. Volume de dados extremamente b
 
 ## 13. Handoff para DevOps Engineer Agent
 
-> **Escopo estrito desta implementação:** apenas os recursos da Seção 6.2, na stack `00-bootstrap-stack-ai/`. **Não** inclui alterar `01-networking-stack-ai/` (remover `override.tf`, rodar `-migrate-state`) — essa é uma tarefa subsequente e separada, fora do escopo desta ADR (Seção 14), que exige autorização explícita própria antes de ser executada.
+> **Escopo estrito desta implementação:** apenas os recursos da Seção 6.2, na stack `00-bootstrap-stack-ai/`. **Não** inclui alterar `01-networking-stack-ai/` (remover `override.tf`, rodar `-migrate-state`) — essa é uma tarefa subsequente e separada, fora do escopo desta ADR (Seção 14), que exige autorização explícita própria antes de ser executada. **A Revisão 1 (mudança de região) não altera este escopo** — ela é documentação/decisão apenas; o realinhamento do código `.tf`/`.tfvars.example`/`README.md` para `us-east-1` é uma tarefa própria e subsequente do `devops-engineer`.
 
 ### 13.1 Ordem de Implementação (respeitando dependências)
 
-0. **Pré-checagem:** confirmar, via `aws s3api list-buckets` (ou `head-bucket` no nome esperado), que nenhum bucket com o nome-alvo já existe. Confirmar também que `01-networking-stack-ai` ainda está com `override.tf` presente (backend local) — se já tiver sido removido e um `init -backend-config` já tiver sido executado contra um bucket diferente, parar e investigar antes de prosseguir.
+0. **Pré-checagem:** confirmar, via `aws s3api list-buckets` (ou `head-bucket` no nome esperado), que nenhum bucket com o nome-alvo já existe, em `us-east-1` **e** em `sa-east-1` (para confirmar que a stack destruída não deixou recursos residuais na região antiga). Confirmar também que `01-networking-stack-ai` ainda está com `override.tf` presente (backend local) — se já tiver sido removido e um `init -backend-config` já tiver sido executado contra um bucket diferente, parar e investigar antes de prosseguir.
 1. Criar o diretório `00-bootstrap-stack-ai/` na raiz do repositório, seguindo a mesma estrutura de arquivos de `01-networking-stack-ai/` (`.claude/rules/terraform-naming-conventions.md`):
    - `main.tf` (ponto de entrada/índice, mesmo com os recursos distribuídos nos arquivos de domínio abaixo)
    - `versions.tf` (`required_version = ">= 1.15.8"`; `hashicorp/aws` `~> 6.0`)
@@ -306,12 +316,12 @@ Estimativa em ordem de grandeza para `sa-east-1`. Volume de dados extremamente b
    - `state-bucket.lifecycle.tf` (`aws_s3_bucket_lifecycle_configuration.this`)
    - `outputs.tf` (`state_bucket_id`, `state_bucket_arn`)
    - `override.tf` (gitignored — força backend local; **nenhum `backend.tf` com bloco `backend "s3"` deve ser criado nesta stack**, Seção 4/D3)
-   - `terraform.tfvars.example` (versionado) e `terraform.tfvars` (gitignored, gerado a partir do example)
+   - `terraform.tfvars.example` (versionado, com `aws_region = "us-east-1"`) e `terraform.tfvars` (gitignored, gerado a partir do example)
    - `.gitignore` (mesmo padrão de `01-networking-stack-ai/.gitignore`)
    - `README.md` (mesmo espírito do de `01-`: pré-requisitos, uso, validação pós-deploy, rollback, pontos de atenção — incluindo a nota explícita de que o backend desta stack é local permanente e o motivo)
 2. Implementar os recursos da Seção 6.2, incluindo a bucket policy com as três cláusulas de negação descritas (TLS, SSE, principal fora da conta).
 3. Rodar `terraform fmt -check` e `terraform validate` em `00-bootstrap-stack-ai/`.
-4. Rodar `terraform plan -out=tfplan` e conferir que: (a) exatamente 1 `aws_s3_bucket`, 1 `aws_s3_bucket_ownership_controls`, 1 `aws_s3_bucket_versioning`, 1 `aws_s3_bucket_server_side_encryption_configuration`, 1 `aws_s3_bucket_public_access_block`, 1 `aws_s3_bucket_policy` e 1 `aws_s3_bucket_lifecycle_configuration` são planejados; (b) as tags obrigatórias (Seção 9) aparecem corretamente; (c) nenhum atributo de `variable "environment"` é solicitado interativamente.
+4. Rodar `terraform plan -out=tfplan` e conferir que: (a) exatamente 1 `aws_s3_bucket`, 1 `aws_s3_bucket_ownership_controls`, 1 `aws_s3_bucket_versioning`, 1 `aws_s3_bucket_server_side_encryption_configuration`, 1 `aws_s3_bucket_public_access_block`, 1 `aws_s3_bucket_policy` e 1 `aws_s3_bucket_lifecycle_configuration` são planejados; (b) as tags obrigatórias (Seção 9) aparecem corretamente; (c) nenhum atributo de `variable "environment"` é solicitado interativamente; (d) os recursos são planejados em `us-east-1` e o nome do bucket embute o segmento `us-east-1` (Revisão 1).
 5. Submeter o `plan` à revisão por pares — obrigatório, mesmo racional de `01-networking-stack-ai` (não há ambiente inferior no repositório para absorver um erro antes de impactar o backend de state de tudo).
 6. Aplicar somente após a revisão do passo 5.
 7. Registrar, no `README.md` da stack, o nome final do bucket (output `state_bucket_id`) e a convenção de `key` a ser usada por stacks consumidoras (`{stack_dir}/{env}/terraform.tfstate`, já refletida em `01-networking-stack-ai/backend.hcl.example`).
@@ -321,7 +331,7 @@ Estimativa em ordem de grandeza para `sa-east-1`. Volume de dados extremamente b
 
 | Variável | Tipo | Descrição |
 |---|---|---|
-| `aws_region` | `string` | Região AWS onde a stack é aplicada (`"sa-east-1"`). |
+| `aws_region` | `string` | Região AWS onde a stack é aplicada (`"us-east-1"` — atualizado na Revisão 1, antes `"sa-east-1"`). |
 | `project_name` | `string` | Nome lógico do projeto (`"bootstrap"`). |
 | `state_bucket` | `object({ force_destroy = bool, noncurrent_version_expiration_days = number, noncurrent_version_retain_count = number, abort_incomplete_multipart_upload_days = number })` | `force_destroy = false` (Seção 11). Valores sugeridos em `terraform.tfvars.example`: `noncurrent_version_expiration_days = 90`, `noncurrent_version_retain_count = 30` (mantém no mínimo as 30 versões não-atuais mais recentes, independentemente da idade, expirando as demais após 90 dias), `abort_incomplete_multipart_upload_days = 7`. |
 | `tags` | `map(string)` | Tags adicionais além das obrigatórias (`Owner`/`CostCenter` — placeholders `"AJUSTAR-..."` até definição pelo solicitante). |
@@ -330,13 +340,13 @@ Estimativa em ordem de grandeza para `sa-east-1`. Volume de dados extremamente b
 
 ### 13.3 Critérios de Aceitação (Definition of Done)
 
-- [ ] Pré-checagem do passo 0 (Seção 13.1) executada e documentada (bucket-alvo não existe previamente; `01-networking-stack-ai/override.tf` intocado).
+- [ ] Pré-checagem do passo 0 (Seção 13.1) executada e documentada (bucket-alvo não existe previamente em `us-east-1` nem em `sa-east-1`; `01-networking-stack-ai/override.tf` intocado).
 - [ ] Todos os recursos da Seção 6.2 provisionados via Terraform (sem cliques no console).
 - [ ] `00-bootstrap-stack-ai/` segue a estrutura de arquivos da Seção 13.1, sem `backend.tf` com bloco `backend "s3"` (apenas `override.tf`).
 - [ ] Tags obrigatórias (Seção 9) aplicadas em 100% dos recursos, incluindo `DataClassification = "confidential"`.
 - [ ] `terraform validate` e `terraform fmt -check` passam sem erros.
 - [ ] `terraform plan` mostra exatamente os recursos listados no passo 4 da Seção 13.1 — revisado explicitamente por um par.
-- [ ] Bucket criado com `versioning.status = "Enabled"`, SSE-S3 (`AES256`) como padrão, Public Access Block com os 4 flags `true`, `Ownership Controls = BucketOwnerEnforced`.
+- [ ] Bucket criado em `us-east-1` com `versioning.status = "Enabled"`, SSE-S3 (`AES256`) como padrão, Public Access Block com os 4 flags `true`, `Ownership Controls = BucketOwnerEnforced`.
 - [ ] Bucket policy nega explicitamente tráfego sem TLS, uploads sem SSE e principals fora da conta AWS atual — validado por leitura do `plan`/policy renderizada, não apenas assumido.
 - [ ] Nenhum acesso público habilitado (`aws s3api get-public-access-block` confirma os 4 flags bloqueados; `aws s3api get-bucket-policy-status` confirma `IsPublic: false`).
 - [ ] Lifecycle configurado conforme Seção 13.2, validado no `plan`.
@@ -346,14 +356,14 @@ Estimativa em ordem de grandeza para `sa-east-1`. Volume de dados extremamente b
 
 ### 13.4 Testes de Validação Pós-Deploy
 
-- `aws s3api get-bucket-versioning --bucket <nome>` — confirmar `Status: Enabled`.
-- `aws s3api get-bucket-encryption --bucket <nome>` — confirmar `SSEAlgorithm: AES256`.
-- `aws s3api get-public-access-block --bucket <nome>` — confirmar os 4 flags `true`.
-- `aws s3api get-bucket-policy-status --bucket <nome>` — confirmar `IsPublic: false`.
-- `aws s3api get-bucket-policy --bucket <nome>` — inspecionar visualmente as 3 cláusulas de negação (TLS, SSE, conta).
-- `aws s3api get-bucket-lifecycle-configuration --bucket <nome>` — confirmar as regras de expiração de versões não-atuais e de abort de multipart upload.
-- `aws s3api get-bucket-ownership-controls --bucket <nome>` — confirmar `ObjectOwnership: BucketOwnerEnforced`.
-- `aws resourcegroupstaggingapi get-resources --tag-filters Key=StackName,Values=00-bootstrap-stack-ai` — confirmar que o bucket está tageado corretamente.
+- `aws s3api get-bucket-versioning --bucket <nome> --region us-east-1` — confirmar `Status: Enabled`.
+- `aws s3api get-bucket-encryption --bucket <nome> --region us-east-1` — confirmar `SSEAlgorithm: AES256`.
+- `aws s3api get-public-access-block --bucket <nome> --region us-east-1` — confirmar os 4 flags `true`.
+- `aws s3api get-bucket-policy-status --bucket <nome> --region us-east-1` — confirmar `IsPublic: false`.
+- `aws s3api get-bucket-policy --bucket <nome> --region us-east-1` — inspecionar visualmente as 3 cláusulas de negação (TLS, SSE, conta).
+- `aws s3api get-bucket-lifecycle-configuration --bucket <nome> --region us-east-1` — confirmar as regras de expiração de versões não-atuais e de abort de multipart upload.
+- `aws s3api get-bucket-ownership-controls --bucket <nome> --region us-east-1` — confirmar `ObjectOwnership: BucketOwnerEnforced`.
+- `aws resourcegroupstaggingapi get-resources --region us-east-1 --tag-filters Key=StackName,Values=00-bootstrap-stack-ai` — confirmar que o bucket está tageado corretamente.
 - Rodar `terraform plan` após o `apply` e confirmar saída "No changes" (sem drift).
 - **Não** rodar `terraform init -backend-config` em `01-networking-stack-ai` como parte desta validação — fora do escopo (Seção 14).
 
@@ -370,10 +380,12 @@ Estimativa em ordem de grandeza para `sa-east-1`. Volume de dados extremamente b
 - **Backup/cópia secundária, fora da AWS, do state local desta própria stack de bootstrap** (mitigação do risco de autorreferência, Seção 11) — recomendação operacional registrada, não implementada via Terraform nesta ADR.
 - **SSE-KMS com CMK dedicada** — avaliada e descartada nesta revisão (Seção 4, D1); reavaliar se um requisito de compliance for introduzido.
 - Uso de qualquer módulo Terraform de terceiros/comunidade — mesma restrição herdada de `01-networking-stack-ai`.
+- **(Nova — Revisão 1) Realinhamento do código Terraform (`.tf`/`.tfvars.example`/`README.md`) para `us-east-1`:** esta revisão altera apenas o ADR (documentação/decisão); a execução do realinhamento de código é uma tarefa própria do `devops-engineer`, fora do escopo de implementação desta revisão específica do `aws-architect` (que não edita `.tf`/`README.md`).
+- **(Nova — Revisão 1) Reavaliação de qualquer outra decisão arquitetural em função da nova região** (estrutura de código, D1/D2/D3) — explicitamente fora do escopo; esta revisão troca apenas a região e os valores diretamente derivados dela.
 
 ## 15. Referências
 
-- [ADR-0001 — Stack de Rede Fundacional (VPC 10.0.0.0/24) em Terraform](./ADR-0001-networking-stack-vpc.md) — Premissa 8, Seção 11 (risco de backend ausente) e Seção 14 (Non-goal "Provisionamento do backend remoto de state"), origem direta desta ADR.
+- [ADR-0001 — Stack de Rede Fundacional (VPC 10.0.0.0/24) em Terraform](./ADR-0001-networking-stack-vpc.md) — Premissa 8, Seção 11 (risco de backend ausente) e Seção 14 (Non-goal "Provisionamento do backend remoto de state"), origem direta desta ADR; Revisão 6 do ADR-0001 registra a mesma mudança de região aplicada em conjunto.
 - [`.claude/rules/terraform-naming-conventions.md`](../../.claude/rules/terraform-naming-conventions.md) — padrão de arquivos, variáveis agregadas por domínio e ausência de `default` em `variables.tf`, seguido pela estrutura proposta na Seção 13.1.
 - [AWS Well-Architected Framework](https://aws.amazon.com/architecture/well-architected/)
 - [Terraform AWS Provider — Backend best practices (S3 native locking)](https://docs.aws.amazon.com/prescriptive-guidance/latest/terraform-aws-provider-best-practices/backend.html) — confirma o padrão `use_lockfile = true` já adotado e a recomendação de habilitar versionamento/criptografia no bucket de backend.
@@ -388,3 +400,4 @@ Estimativa em ordem de grandeza para `sa-east-1`. Volume de dados extremamente b
 - [Recurso `aws_s3_bucket_policy` (registry)](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_policy)
 - [Recurso `aws_s3_bucket_lifecycle_configuration` (registry)](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_lifecycle_configuration)
 - [Recurso `aws_s3_bucket_ownership_controls` (registry)](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_ownership_controls)
+- [Amazon S3 pricing](https://aws.amazon.com/s3/pricing/) — base do recálculo de custo para `us-east-1` na Seção 10/Revisão 1.

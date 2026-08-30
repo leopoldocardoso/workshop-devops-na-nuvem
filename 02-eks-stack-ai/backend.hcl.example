@@ -8,5 +8,5 @@
 # (00-bootstrap-stack-ai, ADR-0002), com versioning e SSE habilitados.
 
 bucket = "SEU_BUCKET_DE_STATE_AQUI"
-key    = "03-eks-stack-ai/prd/terraform.tfstate"
+key    = "02-eks-stack-ai/prd/terraform.tfstate"
 region = "sa-east-1"

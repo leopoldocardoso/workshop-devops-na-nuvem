@@ -1,19 +1,23 @@
-# ADR-0003: Stack de Cluster EKS (`03-eks-stack-ai`)
+# ADR-0003: Stack de Cluster EKS (`02-eks-stack-ai`)
 
 - **Status:** Approved
 - **Data:** 2026-08-28
 - **Autor:** Planner Agent
 - **Supersedes:** N/A
 - **Ambiente:** `prd` (ambiente único do projeto — herdado do ADR-0001 Revisão 5 e do ADR-0002; não há `dev`/`hml` em nenhuma stack deste repositório)
-- **Região AWS:** `sa-east-1` (São Paulo) — mesma conta/região das stacks `00-` e `01-`
+- **Região AWS:** `us-east-1` (N. Virginia) — região padrão do projeto para novos ADRs a partir de 2026-08-30; aplicada retroativamente a esta stack na Revisão 1 (ver Seção 3 e histórico de revisões abaixo)
+- **Histórico de revisões:**
+  - `2026-08-28` — Versão inicial: decisão de provisionar `03-eks-stack-ai` (cluster EKS `1.34`, Managed Node Group de 2× `t3.medium` `ON_DEMAND`, envelope encryption via KMS, control plane logging completo, consumo de `01-networking-stack-ai` via data sources filtrados por tag), na mesma conta/região então vigente (`sa-east-1`).
+  - `2026-08-30` — **Revisão 1 (mudança de região — `sa-east-1` → `us-east-1`):** a região primária desta stack é alterada de `sa-east-1` (São Paulo) para `us-east-1` (N. Virginia), em conformidade com a nova região padrão do projeto para todo ADR a partir de 2026-08-30 (`CLAUDE.md`), aplicada retroativamente a este documento a pedido explícito do solicitante — **não** é uma reavaliação arquitetural, apenas a adoção do novo padrão de região do repositório, feita em conjunto com a mesma mudança no ADR-0001 e no ADR-0002, dos quais esta stack depende diretamente (Seção 4, D4). Alterado em todo o documento: metadados de cabeçalho, Premissa 2, diagrama Mermaid (Seção 6.1), tabela de Recursos AWS (Seção 6.2, incluindo os nomes lógicos que embutem o segmento `{region}`, ex.: `prd-eks-sa-east-1` → `prd-eks-us-east-1`), Naming Convention (Seção 9), variável de input `aws_region` (Seção 13.2), comandos de validação com `--region sa-east-1` fixado (Seção 13.1/13.4) e estimativa de custo (Seção 10). AZs referenciadas (herdadas de `01-networking-stack-ai`) atualizadas de `sa-east-1a`/`sa-east-1b` para `us-east-1a`/`us-east-1b` (`us-east-1` possui 6 AZs; `t3.medium` revalidado como disponível em `us-east-1a` e `us-east-1b` — as duas AZs usadas por esta stack — via `aws-mcp`/`ec2:DescribeInstanceTypeOfferings` em 2026-08-30; ver Premissa 2). Estimativa de custo (Seção 10) recalculada para `us-east-1`: `t3.medium` a `US$ 0,0416`/hora nesta região (vs. `US$ 0,08–0,10`/hora assumido para `sa-east-1`) e NAT Gateway (processamento incremental herdado de `01-`) a `US$ 0,045`/GB (vs. `US$ 0,059`/GB), reduzindo a estimativa total de ~USD 210–275/mês para ~USD 145–190/mês (pricing público validado via busca dirigida — a Pricing API não está exposta pelo `aws-mcp` neste ambiente). A nota de rodapé que qualificava `sa-east-1` como "historicamente mais cara que `us-east-1`" foi removida por perder sentido após a migração — `us-east-1` passa a ser a própria região da stack. **Nenhum recurso real existe hoje sob `sa-east-1` para esta stack** — nenhum `apply` real desta stack jamais ocorreu (apenas planejamento, Premissa 16); portanto esta revisão é uma correção de documentação/decisão arquitetural antes de uma futura implementação, **não** uma migração de infraestrutura viva. Nenhuma decisão de versão do Kubernetes (D1), acesso ao endpoint (D2), envelope encryption (D3), mecanismo de consumo de `01-` (D4), contagem/tamanho de nodes ou estrutura de código foi alterada por esta revisão. **Nota para o `devops-engineer`:** como esta stack nunca foi implementada, não há código `.tf` a realinhar — uma futura implementação já deve nascer com `us-east-1`, seguindo este ADR diretamente.
+  - `2026-08-30` — **Revisão 2 (rename do diretório da stack — `03-eks-stack-ai` → `02-eks-stack-ai`):** a pedido explícito do solicitante, o diretório desta stack é renomeado de `03-eks-stack-ai` para `02-eks-stack-ai` — mudança puramente de nomenclatura/numeração de prefixo, sem nenhuma implicação arquitetural. Como a stack nunca foi implementada (Premissa 16), o rename consistiu em atualizar apenas referências textuais: título e corpo deste ADR, `StackName` na tabela de recursos e no diagrama, comandos de validação (Seção 13.4) e os arquivos já existentes da stack (`main.tf`, `locals.tf`, `README.md`, `backend.hcl.example`). Nenhum recurso real é afetado.
 
 ---
 
 ## 1. Contexto e Problema
 
-O repositório já possui uma stack de bootstrap de backend remoto (`00-bootstrap-stack-ai`, ADR-0002) e uma stack de rede fundacional (`01-networking-stack-ai`, ADR-0001 — VPC `10.0.0.0/24`, 2 sub-redes públicas e 2 privadas em `sa-east-1a`/`sa-east-1b`, NAT Gateway único). Nenhuma stack de compute/containers existe ainda — a Seção 14 (Non-goals) do ADR-0001 já registrava explicitamente "Provisionamento de recursos de compute/containers/aplicação... objeto de uma futura stack (ex.: `02-compute-stack`)".
+O repositório já possui uma stack de bootstrap de backend remoto (`00-bootstrap-stack-ai`, ADR-0002) e uma stack de rede fundacional (`01-networking-stack-ai`, ADR-0001 — VPC `10.0.0.0/24`, 2 sub-redes públicas e 2 privadas em `us-east-1a`/`us-east-1b`, NAT Gateway único). Nenhuma stack de compute/containers existe ainda — a Seção 14 (Non-goals) do ADR-0001 já registrava explicitamente "Provisionamento de recursos de compute/containers/aplicação... objeto de uma futura stack (ex.: `02-compute-stack`)".
 
-O requisito de negócio explícito desta ADR é provisionar um cluster **Amazon EKS** via Terraform, em uma nova stack `03-eks-stack-ai`, com:
+O requisito de negócio explícito desta ADR é provisionar um cluster **Amazon EKS** via Terraform, em uma nova stack `02-eks-stack-ai`, com:
 
 - Boas práticas de EKS (o pedido não lista quais especificamente — este ADR interpreta e declara essa lacuna nas Premissas e nas Seções 4/8).
 - 2 worker nodes.
@@ -24,6 +28,8 @@ O requisito de negócio explícito desta ADR é provisionar um cluster **Amazon 
 Diferente de `01-`/`00-`, esta stack introduz um problema novo para o repositório: **dependência entre stacks**. O cluster EKS precisa da VPC e das sub-redes já provisionadas por `01-networking-stack-ai`, mas essa stack (a) ainda está com backend **local** (`override.tf` presente, confirmado nesta sessão — nenhuma migração para o bucket S3 do ADR-0002 ocorreu) e (b) o próprio bucket do ADR-0002 está com `Status: Proposed` no cabeçalho do documento, mesmo havendo commit de implementação (`00-bootstrap-stack-ai` existe em código). Este ADR trata essa incerteza de forma explícita na Seção 4 (decisão D4) em vez de assumir silenciosamente que um mecanismo de `terraform_remote_state` está disponível.
 
 Este ADR cobre exclusivamente o provisionamento do cluster, seu node group gerenciado e a fundação de IAM/observabilidade associada — não cobre deploy de aplicações, add-ons de terceiros (ALB Controller, Karpenter, ArgoCD etc.) nem IRSA por workload (Seção 14).
+
+> **Nota de revisão (2026-08-30) — Revisão 1, mudança de região:** ver histórico de revisões no cabeçalho para o detalhamento completo. Resumo: `sa-east-1` → `us-east-1`, decisão de padronização de repositório (não arquitetural), sem `apply` real pendente sob a região antiga (esta stack nunca foi implementada), sem impacto em versão do Kubernetes, contagem/tamanho de nodes, ou nas decisões D1–D4 da Seção 4.
 
 ## 2. Drivers de Decisão
 
@@ -44,7 +50,7 @@ Este ADR cobre exclusivamente o provisionamento do cluster, seu node group geren
 **Requisitos não funcionais**
 - Nenhum SLA/RTO/RPO formal informado (mesma lacuna já registrada no ADR-0001/0002 — tratada como Premissa, não como sinal de baixa criticidade).
 - Alta disponibilidade do control plane: nativa do serviço gerenciado EKS (multi-AZ por padrão, fora do controle desta stack).
-- Alta disponibilidade dos worker nodes: 2 nodes distribuídos nas 2 AZs disponíveis (`sa-east-1a`/`sa-east-1b`), via sub-redes privadas já existentes.
+- Alta disponibilidade dos worker nodes: 2 nodes distribuídos nas 2 AZs disponíveis (`us-east-1a`/`us-east-1b`), via sub-redes privadas já existentes.
 
 **Restrições**
 - Ambiente único `prd` (herdado do ADR-0001 Revisão 5) — sem `dev`/`hml` para pré-validar mudanças de cluster antes de produção.
@@ -63,9 +69,9 @@ Este ADR cobre exclusivamente o provisionamento do cluster, seu node group geren
 Como nem todo o checklist de discovery foi respondido explicitamente pelo solicitante, as premissas abaixo foram adotadas conscientemente pelo arquiteto, priorizando não travar o trabalho. Devem ser validadas/contestadas antes da implementação.
 
 1. **Ambiente:** `prd`, único ambiente do projeto — mesmo padrão de `00-`/`01-`. Sem `variable "environment"`; `local.environment = "prd"` fixo.
-2. **Região:** `sa-east-1`, mesma conta/região de `00-`/`01-`. `t3.medium` confirmado disponível em `sa-east-1` via `aws-mcp` (`ec2:DescribeInstanceTypeOfferings`, validado nesta sessão).
+2. **Região (Revisado na Revisão 1):** `us-east-1`, mesma conta/região de `00-`/`01-` a partir da Revisão 6/1 destes documentos — região padrão do projeto para todo novo ADR a partir de 2026-08-30 (`CLAUDE.md`), aplicada retroativamente a esta stack, substituindo `sa-east-1`. `t3.medium` confirmado disponível em `us-east-1` via `aws-mcp` (`ec2:DescribeInstanceTypeOfferings`, revalidado em 2026-08-30) — especificamente nas AZs `us-east-1a` e `us-east-1b`, as duas efetivamente usadas por esta stack (via `01-networking-stack-ai`); `t3.medium` está disponível em 5 das 6 AZs de `us-east-1` (`a`, `b`, `c`, `d`, `f` — não em `e`), o que é irrelevante aqui pois a stack não usa `us-east-1e`.
 3. **"Boas práticas de EKS" não foi detalhado pelo solicitante.** O arquiteto interpretou esse requisito, à luz do [AWS EKS Best Practices Guide](https://docs.aws.amazon.com/eks/latest/best-practices/introduction.html) (validado via `aws-mcp`), como: control plane logging completo (5 tipos), envelope encryption de Secrets via KMS, IAM least-privilege com policies gerenciadas oficiais, worker nodes em sub-redes privadas, node auto repair habilitado, e fundação de IRSA (OIDC provider) — sem, no entanto, expandir o escopo para add-ons de terceiros (ALB Controller, Cluster Autoscaler/Karpenter, CSI drivers) ou observabilidade além do control plane logging solicitado. Ver Seção 14.
-4. **Versão do Kubernetes:** nenhuma foi solicitada explicitamente. Validado via `aws-mcp` (doc "Understand the Kubernetes version lifecycle on EKS", consultada em 2026-08-28): em standard support hoje estão `1.36`, `1.35`, `1.34`; em extended support `1.33`, `1.32`, `1.31`. **Decisão do arquiteto:** `1.34` (released outubro/2025, fim do standard support em dezembro/2026) — versão com maturidade de produção (não é a mais recente, `1.36`, lançada há poucos meses) e com runway de suporte padrão superior a um ano a partir desta data, evitando tanto o risco de uma versão recém-lançada quanto uma migração de suporte estendido precoce. Ver Seção 4, decisão D1.
+4. **Versão do Kubernetes:** nenhuma foi solicitada explicitamente. Validado via `aws-mcp` (doc "Understand the Kubernetes version lifecycle on EKS", consultada em 2026-08-28): em standard support hoje estão `1.36`, `1.35`, `1.34`; em extended support `1.33`, `1.32`, `1.31`. **Decisão do arquiteto:** `1.34` (released outubro/2025, fim do standard support em dezembro/2026) — versão com maturidade de produção (não é a mais recente, `1.36`, lançada há poucos meses) e com runway de suporte padrão superior a um ano a partir desta data, evitando tanto o risco de uma versão recém-lançada quanto uma migração de suporte estendido precoce. Ver Seção 4, decisão D1. **(Nota — Revisão 1)** decisão inalterada; independente de região.
 5. **Módulo Terraform vs. recursos nativos:** validado via `terraform-mcp` que `terraform-aws-modules/eks/aws` (v`21.25.0`, >173M downloads) é o módulo comunitário de referência para EKS. **Decisão do arquiteto:** manter o padrão já estabelecido em `00-`/`01-` (recursos nativos `hashicorp/aws`, sem módulos de terceiros), por consistência de convenção do repositório — mesmo reconhecendo que EKS é sensivelmente mais complexo que VPC/S3 e que o módulo automatizaria parte dessa complexidade. Ver Seção 4 para o trade-off explícito.
 6. **Mecanismo de consumo dos outputs de `01-networking-stack-ai`:** como `01-` está confirmadamente com backend **local** (`override.tf` presente, sem migração para o bucket do ADR-0002) nesta data, **não** é seguro nem portável usar `terraform_remote_state` apontando para um arquivo de state local de outra stack (caminho de arquivo frágil, não funciona em CI/outra máquina, e quebra silenciosamente quando `01-` migrar de backend). **Decisão do arquiteto:** esta stack consome a VPC/sub-redes de `01-` via **data sources nativos filtrados por tag** (`data.aws_vpc`, `data.aws_subnets`, filtrando por `tag:StackName = "01-networking-stack-ai"` e `tag:Tier`), não via `terraform_remote_state`. Ver Seção 4, decisão D4, para as alternativas descartadas e o trade-off.
 7. **Acesso ao endpoint da API do cluster:** nenhum CIDR de escritório/VPN/CI foi informado. **Decisão do arquiteto:** endpoint público + privado (`endpoint_public_access = true`, `endpoint_private_access = true`), com `public_access_cidrs` como variável **obrigatória, sem default e com validação que rejeita `0.0.0.0/0`** — o solicitante/operador deve fornecer o(s) CIDR(s) reais antes do primeiro `apply`. Ver Seção 4, decisão D2, e Seção 8.
@@ -77,7 +83,8 @@ Como nem todo o checklist de discovery foi respondido explicitamente pelo solici
 13. **Add-ons do cluster (VPC CNI, CoreDNS, kube-proxy, EBS CSI):** esta ADR mantém o comportamento padrão do EKS (`bootstrap_self_managed_addons = true`, valor default do provider), sem gerenciar add-ons via `aws_eks_addon` nesta revisão — tratado como Non-goal (Seção 14), dado que o pedido original não solicitou gestão de add-ons.
 14. **Fargate Profiles / EKS Auto Mode:** fora de escopo — o pedido explícito é por Managed Node Group EC2 (`ON_DEMAND`, `t3.medium`), não por EKS Auto Mode ou Fargate.
 15. **Acesso administrativo inicial ao cluster:** assume-se `access_config.authentication_mode = "API"` com `bootstrap_cluster_creator_admin_permissions = true` (quem aplica o Terraform recebe acesso administrativo via IAM, modelo de Access Entries — API nativa do EKS, validado via `terraform-mcp`), em vez do `aws-auth` ConfigMap legado (`CONFIG_MAP`), por ser o modelo mais atual e recomendado pela AWS. Concessão de acesso a outros usuários/times via `aws_eks_access_entry` é tratada como Non-goal (Seção 14) — depende de quais times/usuários precisarão de acesso, informação não fornecida.
-16. **Estado atual:** greenfield — nenhum cluster EKS real foi criado ainda nesta conta para esta stack (não verificável exaustivamente via `aws-mcp` nesta sessão de planejamento sem uma varredura completa da conta; a pré-checagem formal fica no passo 0 da Seção 13.1, a cargo do `devops-engineer`).
+16. **Estado atual:** greenfield — nenhum cluster EKS real foi criado ainda nesta conta para esta stack (não verificável exaustivamente via `aws-mcp` nesta sessão de planejamento sem uma varredura completa da conta; a pré-checagem formal fica no passo 0 da Seção 13.1, a cargo do `devops-engineer`). **(Nota — Revisão 1)** esta premissa segue integralmente válida: nenhum `apply` real desta stack jamais ocorreu, em nenhuma região — a mudança de região não encontra nenhum recurso residual a considerar.
+17. **(Nova — Revisão 1) Mudança de região é puramente de padronização de repositório, não uma decisão arquitetural nova:** `us-east-1` passa a ser a região padrão de todo novo ADR deste repositório a partir de 2026-08-30 (`CLAUDE.md`); esta revisão aplica esse padrão retroativamente a este documento, a pedido explícito do solicitante, sem reabrir nenhuma outra decisão arquitetural (D1–D4, contagem/tamanho de nodes, estrutura de código).
 
 ## 4. Opções Consideradas
 
@@ -105,7 +112,7 @@ Como nem todo o checklist de discovery foi respondido explicitamente pelo solici
 - **Descrição:** `version = "1.34"` no `aws_eks_cluster`. Standard support até dezembro/2026 (validado via `aws-mcp`).
 - **Prós:** versão madura (release outubro/2025, ~10 meses de produção real na comunidade até a data desta ADR); runway de standard support superior a um ano a partir de hoje; compatível com `ami_type = "AL2023_x86_64_STANDARD"`.
 - **Contras:** não é a versão mais recente (`1.36`); upgrade para versões futuras será necessário antes de dezembro/2026.
-- **Custo estimado:** idêntico às demais opções (preço do control plane EKS não varia por versão).
+- **Custo estimado:** idêntico às demais opções (preço do control plane EKS não varia por versão nem por região).
 
 #### Opção B — `1.36` (mais recente em standard support)
 - **Descrição:** `version = "1.36"`.
@@ -180,7 +187,7 @@ Como nem todo o checklist de discovery foi respondido explicitamente pelo solici
 - **Custo estimado:** USD 0.
 
 #### Opção C — `terraform_remote_state` apontando para o backend S3 (assumindo migração futura de `01-` já concluída)
-- **Descrição:** `data "terraform_remote_state" "networking" { backend = "s3", config = { bucket = ..., key = "01-networking-stack-ai/prd/terraform.tfstate", region = "sa-east-1" } }`.
+- **Descrição:** `data "terraform_remote_state" "networking" { backend = "s3", config = { bucket = ..., key = "01-networking-stack-ai/prd/terraform.tfstate", region = "us-east-1" } }`.
 - **Prós:** seria a opção mais "correta" em um estado final onde todas as stacks já usam backend remoto — outputs tipados, sem dependência de tags.
 - **Contras:** **não aplicável hoje** — `01-networking-stack-ai` está confirmadamente com `override.tf` (backend local) nesta sessão; codificar essa opção agora faria `terraform init`/`plan` desta stack falhar imediatamente (o objeto S3 referenciado não existe, pois `01-` nunca escreveu seu state lá).
 - **Custo estimado:** USD 0.
@@ -193,6 +200,8 @@ Como nem todo o checklist de discovery foi respondido explicitamente pelo solici
 
 Justificativa consolidada, referenciando os drivers da Seção 2: a combinação atende integralmente aos 4 requisitos funcionais explícitos do solicitante (cluster EKS, 2 workers `t3.medium`, `ON_DEMAND`, control plane logging), interpreta "boas práticas" de forma explícita e documentada (Premissa 3) sem expandir para add-ons/observabilidade não solicitados, mantém a stack **desacoplada** do estado de migração de backend de `01-` (o risco mais concreto e específico deste ADR, dado que é a primeira stack do repositório a depender de outra), e resolve o único ponto realmente ambíguo deixado ao critério do arquiteto (acesso ao endpoint da API) com uma opção que não trava a operação nem viola least-privilege por default.
 
+**Decisão da Revisão 1 (mudança de região):** adotado `us-east-1` como região primária, em substituição a `sa-east-1`, por conformidade com a nova região padrão do projeto para todo ADR a partir de 2026-08-30, aplicada retroativamente a pedido do solicitante — decisão de padronização de repositório, não uma reavaliação técnica. Nenhuma das decisões D1–D4 acima é reaberta.
+
 ## 6. Arquitetura Proposta
 
 ### 6.1 Diagrama
@@ -202,20 +211,20 @@ flowchart TB
     Engineer(["DevOps Engineer / CI\n(terraform apply + kubectl,\nvia CIDR autorizado)"])
 
     subgraph Net["01-networking-stack-ai (referenciada via data sources — NÃO provisionada por este ADR)"]
-        VPC["VPC 10.0.0.0/24\nprd-networking-vpc-sa-east-1"]
+        VPC["VPC 10.0.0.0/24\nprd-networking-vpc-us-east-1"]
         PubSub["2x Subnet pública\n(Tier=public)"]
         PrivSub["2x Subnet privada\n(Tier=private)"]
         NAT["NAT Gateway único\n(existente)"]
     end
 
-    subgraph EksStack["03-eks-stack-ai"]
-        ClusterRole["IAM Role — Cluster\nprd-eks-cluster-role-sa-east-1"]
-        NodeRole["IAM Role — Node Group\nprd-eks-node-role-sa-east-1"]
-        KMS["KMS CMK\nprd-eks-secrets-sa-east-1\n(envelope encryption Secrets)"]
-        LogGroup["CloudWatch Log Group\n/aws/eks/prd-eks-sa-east-1/cluster"]
-        Cluster["EKS Cluster (control plane)\nprd-eks-sa-east-1 — k8s 1.34"]
+    subgraph EksStack["02-eks-stack-ai"]
+        ClusterRole["IAM Role — Cluster\nprd-eks-cluster-role-us-east-1"]
+        NodeRole["IAM Role — Node Group\nprd-eks-node-role-us-east-1"]
+        KMS["KMS CMK\nprd-eks-secrets-us-east-1\n(envelope encryption Secrets)"]
+        LogGroup["CloudWatch Log Group\n/aws/eks/prd-eks-us-east-1/cluster"]
+        Cluster["EKS Cluster (control plane)\nprd-eks-us-east-1 — k8s 1.34"]
         OIDC["IAM OIDC Provider\n(fundação IRSA)"]
-        NodeGroup["EKS Managed Node Group\nprd-eks-ng-sa-east-1\n2x t3.medium ON_DEMAND"]
+        NodeGroup["EKS Managed Node Group\nprd-eks-ng-us-east-1\n2x t3.medium ON_DEMAND"]
     end
 
     Engineer -- "kubectl / API (endpoint público restrito por CIDR)" --> Cluster
@@ -235,26 +244,28 @@ flowchart TB
     VPC --- PrivSub
 ```
 
-> Diagrama editável equivalente, com fluxo "vivo" (setas animadas), gerado em `docs/diagramas/ADR-0003-eks-stack.drawio` — ver seção **DIAGRAMA DRAW.IO**.
+> Diagrama editável equivalente, com fluxo "vivo" (setas animadas), gerado em `docs/diagramas/ADR-0003-eks-stack.drawio` — ver seção **DIAGRAMA DRAW.IO**. **Atualizado na Revisão 1:** todos os nomes lógicos que embutem `{region}` atualizados de `sa-east-1` para `us-east-1`.
 
 > Nota: `VPC`, `PubSub`, `PrivSub` e `NAT` representam recursos **já existentes**, provisionados por `01-networking-stack-ai` (ADR-0001) e **consumidos** por esta stack via data sources (Seção 4, decisão D4) — não são criados/modificados por este ADR. Incluídos no diagrama apenas para deixar explícito o fluxo de dependência entre stacks.
 
 ### 6.2 Recursos AWS
 
+> **Tabela atualizada na Revisão 1:** coluna Região e segmento `{region}` dos nomes lógicos atualizados de `sa-east-1` para `us-east-1`.
+
 | Recurso | Tipo (Terraform) | Nome lógico | Região | Observações |
 |---|---|---|---|---|
-| IAM Role — Cluster | `aws_iam_role` | `prd-eks-cluster-role-sa-east-1` | sa-east-1 | Trust policy `eks.amazonaws.com` (`sts:AssumeRole`, `sts:TagSession`). Policy gerenciada `AmazonEKSClusterPolicy` anexada via `aws_iam_role_policy_attachment`. |
-| IAM Role — Node Group | `aws_iam_role` | `prd-eks-node-role-sa-east-1` | sa-east-1 | Trust policy `ec2.amazonaws.com`. Policies gerenciadas `AmazonEKSWorkerNodePolicy`, `AmazonEKS_CNI_Policy`, `AmazonEC2ContainerRegistryReadOnly` anexadas via `aws_iam_role_policy_attachment` (3 recursos). |
-| KMS Key (Secrets) | `aws_kms_key` | `prd-eks-secrets-sa-east-1` | sa-east-1 | CMK simétrica, `enable_key_rotation = true`, `deletion_window_in_days` parametrizável (default sugerido 30). Usada em `encryption_config.provider.key_arn` do cluster (Seção 4, D3). |
-| KMS Alias | `aws_kms_alias` | `alias/prd-eks-secrets-sa-east-1` | sa-east-1 | Alias legível para a CMK acima. |
-| CloudWatch Log Group | `aws_cloudwatch_log_group` | `/aws/eks/prd-eks-sa-east-1/cluster` | sa-east-1 | Nome **fixo**, exigido pela integração nativa do EKS control plane logging (não é escolha livre). Retenção parametrizável (default sugerido 90 dias). Criado **antes** do cluster para controlar a retenção desde o primeiro log (evitar retenção "never expire" default da AWS). |
-| EKS Cluster | `aws_eks_cluster` | `prd-eks-sa-east-1` | sa-east-1 | `version = "1.34"`; `vpc_config.subnet_ids` = 2 públicas + 2 privadas (via data source, Seção 4/D4); `endpoint_private_access = true`, `endpoint_public_access = true`, `public_access_cidrs = var.eks_cluster.endpoint_public_access_cidrs` (obrigatório); `enabled_cluster_log_types` = `["api","audit","authenticator","controllerManager","scheduler"]`; `encryption_config` apontando para a CMK; `access_config.authentication_mode = "API"`. |
-| IAM OIDC Provider | `aws_iam_openid_connect_provider` | tag `Name = prd-eks-oidc-sa-east-1` | Global (IAM) | `url = aws_eks_cluster.this.identity[0].oidc[0].issuer`; `client_id_list = ["sts.amazonaws.com"]`; **sem** `thumbprint_list` — IAM resolve automaticamente (validado via `terraform-mcp`, provider `6.62.0`). Fundação para IRSA futura (Seção 3, Premissa 9); nenhuma role de workload é criada nesta ADR. |
-| EKS Managed Node Group | `aws_eks_node_group` | `prd-eks-ng-sa-east-1` | sa-east-1 | `subnet_ids` = 2 sub-redes **privadas** (via data source); `capacity_type = "ON_DEMAND"`; `instance_types = ["t3.medium"]`; `ami_type = "AL2023_x86_64_STANDARD"`; `scaling_config = { desired_size = 2, min_size = 2, max_size = 3 }` (headroom de 1 nó acima do desejado para rolling update/rebalanceamento de AZ, sem alterar a contagem operacional de 2 workers solicitada); `update_config.max_unavailable = 1`; `node_repair_config.enabled = true`. |
-| Data source — VPC | `data.aws_vpc` | — | sa-east-1 | Filtra por `tag:StackName = "01-networking-stack-ai"` + `tag:Environment = "prd"`. **Não provisionado por este ADR.** |
-| Data source — Subnets privadas | `data.aws_subnets` | — | sa-east-1 | Filtra por `vpc_id` (acima) + `tag:Tier = "private"` + `tag:StackName = "01-networking-stack-ai"`. **Não provisionado por este ADR.** |
-| Data source — Subnets públicas | `data.aws_subnets` | — | sa-east-1 | Filtra por `vpc_id` (acima) + `tag:Tier = "public"` + `tag:StackName = "01-networking-stack-ai"`. **Não provisionado por este ADR.** |
-| Data source — Account ID | `data.aws_caller_identity` | `current` | sa-east-1 | Usado apenas se necessário para ARNs explícitos em políticas (ex.: condição `aws:PrincipalAccount`, se aplicável em hardening futuro); não estritamente necessário para o escopo mínimo desta ADR. |
+| IAM Role — Cluster | `aws_iam_role` | `prd-eks-cluster-role-us-east-1` | us-east-1 | Trust policy `eks.amazonaws.com` (`sts:AssumeRole`, `sts:TagSession`). Policy gerenciada `AmazonEKSClusterPolicy` anexada via `aws_iam_role_policy_attachment`. |
+| IAM Role — Node Group | `aws_iam_role` | `prd-eks-node-role-us-east-1` | us-east-1 | Trust policy `ec2.amazonaws.com`. Policies gerenciadas `AmazonEKSWorkerNodePolicy`, `AmazonEKS_CNI_Policy`, `AmazonEC2ContainerRegistryReadOnly` anexadas via `aws_iam_role_policy_attachment` (3 recursos). |
+| KMS Key (Secrets) | `aws_kms_key` | `prd-eks-secrets-us-east-1` | us-east-1 | CMK simétrica, `enable_key_rotation = true`, `deletion_window_in_days` parametrizável (default sugerido 30). Usada em `encryption_config.provider.key_arn` do cluster (Seção 4, D3). |
+| KMS Alias | `aws_kms_alias` | `alias/prd-eks-secrets-us-east-1` | us-east-1 | Alias legível para a CMK acima. |
+| CloudWatch Log Group | `aws_cloudwatch_log_group` | `/aws/eks/prd-eks-us-east-1/cluster` | us-east-1 | Nome **fixo**, exigido pela integração nativa do EKS control plane logging (não é escolha livre). Retenção parametrizável (default sugerido 90 dias). Criado **antes** do cluster para controlar a retenção desde o primeiro log (evitar retenção "never expire" default da AWS). |
+| EKS Cluster | `aws_eks_cluster` | `prd-eks-us-east-1` | us-east-1 | `version = "1.34"`; `vpc_config.subnet_ids` = 2 públicas + 2 privadas (via data source, Seção 4/D4); `endpoint_private_access = true`, `endpoint_public_access = true`, `public_access_cidrs = var.eks_cluster.endpoint_public_access_cidrs` (obrigatório); `enabled_cluster_log_types` = `["api","audit","authenticator","controllerManager","scheduler"]`; `encryption_config` apontando para a CMK; `access_config.authentication_mode = "API"`. |
+| IAM OIDC Provider | `aws_iam_openid_connect_provider` | tag `Name = prd-eks-oidc-us-east-1` | Global (IAM) | `url = aws_eks_cluster.this.identity[0].oidc[0].issuer`; `client_id_list = ["sts.amazonaws.com"]`; **sem** `thumbprint_list` — IAM resolve automaticamente (validado via `terraform-mcp`, provider `6.62.0`). Fundação para IRSA futura (Seção 3, Premissa 9); nenhuma role de workload é criada nesta ADR. |
+| EKS Managed Node Group | `aws_eks_node_group` | `prd-eks-ng-us-east-1` | us-east-1 | `subnet_ids` = 2 sub-redes **privadas** (via data source); `capacity_type = "ON_DEMAND"`; `instance_types = ["t3.medium"]`; `ami_type = "AL2023_x86_64_STANDARD"`; `scaling_config = { desired_size = 2, min_size = 2, max_size = 3 }` (headroom de 1 nó acima do desejado para rolling update/rebalanceamento de AZ, sem alterar a contagem operacional de 2 workers solicitada); `update_config.max_unavailable = 1`; `node_repair_config.enabled = true`. |
+| Data source — VPC | `data.aws_vpc` | — | us-east-1 | Filtra por `tag:StackName = "01-networking-stack-ai"` + `tag:Environment = "prd"`. **Não provisionado por este ADR.** |
+| Data source — Subnets privadas | `data.aws_subnets` | — | us-east-1 | Filtra por `vpc_id` (acima) + `tag:Tier = "private"` + `tag:StackName = "01-networking-stack-ai"`. **Não provisionado por este ADR.** |
+| Data source — Subnets públicas | `data.aws_subnets` | — | us-east-1 | Filtra por `vpc_id` (acima) + `tag:Tier = "public"` + `tag:StackName = "01-networking-stack-ai"`. **Não provisionado por este ADR.** |
+| Data source — Account ID | `data.aws_caller_identity` | `current` | us-east-1 | Usado apenas se necessário para ARNs explícitos em políticas (ex.: condição `aws:PrincipalAccount`, se aplicável em hardening futuro); não estritamente necessário para o escopo mínimo desta ADR. |
 
 ### 6.3 Módulos Terraform Recomendados
 
@@ -273,7 +284,7 @@ flowchart TB
 | **Security** | IAM least-privilege (apenas policies gerenciadas oficiais mínimas, nenhum `*`/`Resource: "*"` customizado); envelope encryption de Secrets via CMK dedicada (D3); endpoint da API restrito por CIDR obrigatório, nunca `0.0.0.0/0` (D2); worker nodes em sub-redes privadas, sem IP público; control plane logging completo (5 tipos) para auditoria; fundação IRSA (OIDC) disponível para eliminar, no futuro, a necessidade de credenciais de longa duração em pods. |
 | **Reliability** | Control plane EKS é multi-AZ nativamente (gerenciado pela AWS); node group distribuído nas 2 AZs disponíveis via as 2 sub-redes privadas de `01-`; `max_size = 3` (acima do `desired_size = 2`) permite rolling update sem indisponibilidade completa. **Herdado de `01-` (fora do controle desta ADR):** o NAT Gateway único (SPOF aceito em produção, ADR-0001 Premissa 14) é o caminho de egress de todo o tráfego de saída dos nodes (pull de imagens de container, chamadas a APIs AWS) — uma falha do NAT afeta diretamente a capacidade dos nodes desta stack de funcionar corretamente, não apenas a rede genérica. |
 | **Performance Efficiency** | `t3.medium` é adequado para uma carga inicial/baixa (2 vCPU burstable, 4 GiB RAM) — requisito explícito do solicitante, não uma escolha de performance desta ADR; `AL2023_x86_64_STANDARD` é a AMI otimizada mais atual recomendada pela AWS para novos node groups. |
-| **Cost Optimization** | `capacity_type = "ON_DEMAND"` foi um requisito explícito do solicitante (não Spot) — sem otimização de custo via Spot nesta ADR, por decisão consciente e informada do solicitante, não uma omissão do arquiteto. `desired_size = 2` fixo (sem autoscaling horizontal de nodes/Cluster Autoscaler/Karpenter nesta ADR — Non-goal, Seção 14) evita custo variável não solicitado. |
+| **Cost Optimization** | `capacity_type = "ON_DEMAND"` foi um requisito explícito do solicitante (não Spot) — sem otimização de custo via Spot nesta ADR, por decisão consciente e informada do solicitante, não uma omissão do arquiteto. `desired_size = 2` fixo (sem autoscaling horizontal de nodes/Cluster Autoscaler/Karpenter nesta ADR — Non-goal, Seção 14) evita custo variável não solicitado. **(Revisão 1)** `us-east-1` reduz a estimativa total de custo mensal frente a `sa-east-1` (Seção 10), sem nenhuma mudança de decisão de otimização de custo em si. |
 | **Sustainability** | Reaproveita 100% a infraestrutura de rede já existente (`01-networking-stack-ai`) em vez de provisionar uma VPC dedicada para o cluster — reduz duplicação de recursos de rede (IGW, NAT, sub-redes) que seria necessária em uma arquitetura de VPC isolada por serviço. |
 
 ## 8. Segurança
@@ -288,7 +299,7 @@ flowchart TB
 
 ## 9. Naming Convention & Tagging
 
-- **Padrão de nomes:** mesmo padrão de `00-`/`01-`, `{env}-{project_name}-{service}-{region}` (ex.: `prd-eks-cluster-role-sa-east-1`). Para o nome do próprio cluster e do node group, o segmento `{service}` é omitido quando redundante com `project_name` (`prd-eks-sa-east-1` para o cluster, não `prd-eks-cluster-sa-east-1`, seguindo a regra de não repetir o tipo do recurso no nome — `.claude/rules/terraform-naming-conventions.md`, Seção 3, aplicada aqui também ao nome de negócio do recurso, não só ao identificador Terraform).
+- **Padrão de nomes:** mesmo padrão de `00-`/`01-`, `{env}-{project_name}-{service}-{region}` (ex.: `prd-eks-cluster-role-us-east-1` — atualizado na Revisão 1, antes `prd-eks-cluster-role-sa-east-1`). Para o nome do próprio cluster e do node group, o segmento `{service}` é omitido quando redundante com `project_name` (`prd-eks-us-east-1` para o cluster, não `prd-eks-cluster-us-east-1`, seguindo a regra de não repetir o tipo do recurso no nome — `.claude/rules/terraform-naming-conventions.md`, Seção 3, aplicada aqui também ao nome de negócio do recurso, não só ao identificador Terraform).
 - `project_name` desta stack: `"eks"`.
 - **Tags obrigatórias** (aplicadas via `default_tags` do provider + reforçadas em cada recurso, mesmo padrão de `00-`/`01-`):
   - `Environment` = `"prd"` (fixo — mesmo padrão do ADR-0001 Revisão 5/ADR-0002)
@@ -297,23 +308,23 @@ flowchart TB
   - `Project` = `"eks"` (`project_name`)
   - `ManagedBy` = `"terraform"`
   - `DataClassification` = `"confidential"` — o cluster hospedará Secrets/credenciais de aplicações futuras (classificação mais restritiva que `"internal"` de `01-`, na mesma lógica de `"confidential"` já usada para o bucket de state em `00-`).
-  - `StackName` = `"03-eks-stack-ai"`
+  - `StackName` = `"02-eks-stack-ai"`
 
 ## 10. Custo Estimado
 
-Estimativas em ordem de grandeza para `sa-east-1`. Valores de EC2/EKS variam por tipo de cobrança e devem ser validados no AWS Pricing Calculator antes do go-live.
+Estimativas em ordem de grandeza para `us-east-1` (Revisão 1 — anteriormente calculadas para `sa-east-1`, ver histórico de revisões). Valores de EC2/EKS variam por tipo de cobrança e devem ser validados no AWS Pricing Calculator antes do go-live.
 
 | Item | Modelo de pricing | Estimativa mensal (USD) |
 |---|---|---|
-| EKS control plane | On-demand, por cluster/hora (~USD 0,10/h) | ~73 |
-| 2x `t3.medium` ON_DEMAND (worker nodes) | On-demand por hora, `sa-east-1` (~USD 0,08–0,10/h por instância nesta região) | ~117–146 |
+| EKS control plane | On-demand, por cluster/hora (~USD 0,10/h — preço uniforme entre regiões, validado via pesquisa dirigida) | ~73 |
+| 2x `t3.medium` ON_DEMAND (worker nodes) | On-demand por hora, `us-east-1` (~USD 0,0416/h por instância nesta região, validado via pesquisa de pricing pública) | ~55–65 |
 | 2x EBS `gp3` (disco dos nodes, `disk_size` default 20 GiB cada) | On-demand por GB-mês | ~3–5 |
 | KMS CMK dedicada (Secrets) | Por chave/mês + chamadas de API | ~1–2 |
-| CloudWatch Logs (5 tipos de control plane log — ingestão + armazenamento) | On-demand por GB | ~10–30 (`audit` tende a ser o mais volumoso) |
-| Processamento de dados adicional via NAT Gateway (pull de imagens de container pelos nodes) | On-demand por GB, incremental sobre o baseline já estimado em `01-` | ~5–20 |
-| **Total estimado** | | **~ USD 210–275** |
+| CloudWatch Logs (5 tipos de control plane log — ingestão + armazenamento) | On-demand por GB | ~8–25 (`audit` tende a ser o mais volumoso) |
+| Processamento de dados adicional via NAT Gateway (pull de imagens de container pelos nodes) | On-demand por GB, incremental sobre o baseline já estimado em `01-` (`US$ 0,045`/GB em `us-east-1`) | ~4–15 |
+| **Total estimado** | | **~ USD 145–190** |
 
-> Estimativa em ordem de grandeza; validar com Cost Explorer/AWS Pricing Calculator antes do go-live, especialmente o custo de instância EC2 em `sa-east-1` (histori­camente mais caro que `us-east-1`) e o volume real de logs de `audit`, que pode variar significativamente com a atividade do cluster. Este é o maior custo mensal recorrente entre as 3 stacks do repositório até o momento (`00-`: ~USD 1-3; `01-`: ~USD 55-80; `03-`: ~USD 210-275) — validar orçamento com o solicitante antes do `apply` real (Seção 13.3).
+> Estimativa em ordem de grandeza; validar com Cost Explorer/AWS Pricing Calculator antes do go-live, especialmente o volume real de logs de `audit`, que pode variar significativamente com a atividade do cluster. **(Revisão 1)** valores recalculados para `us-east-1`: o item de maior variação é o custo de instância `t3.medium` (`US$ 0,0416`/h em `us-east-1` vs. `US$ 0,08–0,10`/h assumido para `sa-east-1` nas versões anteriores deste documento), reduzindo a estimativa total de ~USD 210–275/mês para ~USD 145–190/mês. Este continua sendo o maior custo mensal recorrente entre as 3 stacks do repositório (`00-`: ~USD 1-3; `01-`: ~USD 40-65; `02-`: ~USD 145-190) — validar orçamento com o solicitante antes do `apply` real (Seção 13.3).
 
 ## 11. Riscos e Mitigações
 
@@ -325,14 +336,15 @@ Estimativas em ordem de grandeza para `sa-east-1`. Valores de EC2/EKS variam por
 | **NAT Gateway único herdado de `01-` (SPOF em produção, ADR-0001 Premissa 14)** agora impacta diretamente a capacidade operacional dos worker nodes (pull de imagens, chamadas a APIs AWS via IAM roles), não apenas conectividade genérica | Média (mesma probabilidade já aceita em `01-`) | Alto (indisponibilidade do NAT interrompe a capacidade dos nodes de funcionar corretamente, incluindo scale-out/replace de nodes) | Risco herdado e já aceito conscientemente em `01-` (ADR-0001 Seção 11); esta ADR **não** o reabre, apenas registra que seu impacto agora se estende ao plano de compute. Nenhuma mitigação adicional nesta ADR — reversão para NAT HA, se decidida, deve ser tratada na stack `01-` (fora de escopo aqui). |
 | **`encryption_config` não pode ser adicionado a um cluster já existente sem essa configuração** — se o `devops-engineer`, por qualquer motivo, aplicar o cluster sem esse bloco e tentar adicioná-lo depois, o Terraform indicará `# forces replacement` | Baixa (configuração já presente no código desde a primeira versão, Seção 6.2) | Alto (recriação completa do cluster, incluindo o node group associado) | `terraform plan` revisado obrigatoriamente antes do primeiro `apply` (Seção 13.1) deve confirmar a presença do bloco `encryption_config` já na primeira criação. |
 | **Ausência de ambiente inferior (`dev`/`hml`) para pré-validar mudanças de cluster** — herdado do padrão de ambiente único do repositório (ADR-0001 Premissa 16) | Média | Alto (um erro de configuração de cluster/node group impacta produção diretamente) | `terraform plan` revisado obrigatoriamente por pares antes de todo `apply` (mesma política já em vigor em `00-`/`01-`); recomenda-se, como evolução futura fora do escopo desta ADR, testar mudanças de cluster em uma conta/projeto sandbox separado antes de aplicar em `prd`. |
-| **Custo mensal significativamente maior que `00-`/`01-`** (~USD 210-275 vs. ~USD 56-83 combinado das duas stacks anteriores) sem confirmação explícita de orçamento pelo solicitante | Média | Médio (risco financeiro, não técnico) | Estimativa de custo (Seção 10) deve ser validada/aprovada explicitamente pelo solicitante antes do `apply` real — tratado como critério de aceitação (Seção 13.3), não assumido implicitamente. |
+| **Custo mensal significativamente maior que `00-`/`01-`** (~USD 145-190 vs. ~USD 41-68 combinado das duas stacks anteriores, recalculado para `us-east-1`) sem confirmação explícita de orçamento pelo solicitante | Média | Médio (risco financeiro, não técnico) | Estimativa de custo (Seção 10) deve ser validada/aprovada explicitamente pelo solicitante antes do `apply` real — tratado como critério de aceitação (Seção 13.3), não assumido implicitamente. |
 | **Deleção acidental do cluster** (`terraform destroy`/`aws eks delete-cluster` sem intenção) | Baixa | Crítico (perda do cluster e de todos os workloads não persistidos externamente) | `deletion_protection` **não** é suportado de forma nativa e retroativa em todas as versões do provider como um simples booleano imutável — usar `lifecycle { prevent_destroy = true }` no `aws_eks_cluster` (a ser avaliado pelo `devops-engineer` na implementação) e o guardrail já vigente do agente `devops-engineer` de nunca rodar `destroy`/`delete-*` sem confirmação explícita em sessão. |
+| **(Nova — Revisão 1) Nenhum código Terraform (`.tf`) desta stack existe ainda** — diferente de `01-`/`00-`, não há realinhamento a fazer, mas uma futura implementação deve nascer diretamente com `us-east-1`, sem herdar `sa-east-1` de nenhum rascunho anterior | Baixa (esta stack nunca foi implementada — Premissa 16) | Baixo (apenas checklist de atenção para o `devops-engineer`) | O `devops-engineer` deve implementar diretamente a partir deste ADR (já em `us-east-1`); não há código legado a corrigir. |
 
 ## 12. Estratégia de Rollback
 
-- **Cenário mais provável (nenhum `apply` real ainda):** `git revert` da criação da stack `03-eks-stack-ai` e/ou simplesmente não aplicar. Nenhuma infraestrutura é afetada.
+- **Cenário mais provável (nenhum `apply` real ainda):** `git revert` da criação da stack `02-eks-stack-ai` e/ou simplesmente não aplicar. Nenhuma infraestrutura é afetada.
 - **Mudanças incrementais pós-criação** (ex.: ajustar `desired_size`/`max_size` do node group, atualizar `public_access_cidrs`, ajustar retenção de logs): não forçam recriação do cluster — são `apply` incrementais de baixo risco, cobertos pelo `update_config` do node group (`max_unavailable = 1`, evita indisponibilidade total durante rolling update).
-- **Mudanças que forçam recriação completa do cluster** (`# forces replacement` no `plan`): `version` do Kubernetes só suporta upgrade in-place na direção "para frente" (downgrades não são suportados pelo EKS — validado via `terraform-mcp`, argumento `version` do `aws_eks_cluster`); `encryption_config`, `kubernetes_network_config.service_ipv4_cidr` e `vpc_config.subnet_ids` (dependendo da mudança) também podem forçar recriação. Qualquer `plan` que indique recriação do `aws_eks_cluster` deve ser tratado como uma migração planejada, com janela de manutenção e comunicação prévia — nunca aplicado sem revisão explícita por par.
+- **Mudanças que forçam recriação completa do cluster** (`# forces replacement` no `plan`): `version` do Kubernetes só suporta upgrade in-place na direção "para frente" (downgrades não são suportados pelo EKS — validado via `terraform-mcp`, argumento `version` do `aws_eks_cluster`); `encryption_config`, `kubernetes_network_config.service_ipv4_cidr` e `vpc_config.subnet_ids` (dependendo da mudança) também podem forçar recriação. Uma mudança de região (`us-east-1` ↔ `sa-east-1`), embora não prevista, também forçaria recriação completa (nenhum recurso desta stack pode ser "movido" entre regiões via Terraform). Qualquer `plan` que indique recriação do `aws_eks_cluster` deve ser tratado como uma migração planejada, com janela de manutenção e comunicação prévia — nunca aplicado sem revisão explícita por par.
 - **Rollback de upgrade de versão do Kubernetes:** o EKS suporta rollback de um upgrade in-place para a versão minor anterior dentro de 7 dias após a conclusão do upgrade (validado via `aws-mcp`, doc "Understand the Kubernetes version lifecycle on EKS") — mecanismo nativo da AWS, não do Terraform; útil como plano de contingência caso um upgrade futuro (fora do escopo desta ADR inicial) cause regressão.
 - **Node Group:** pode ser destruído e recriado independentemente do cluster (não força recriação do `aws_eks_cluster`); útil para reverter uma mudança problemática de `ami_type`/`instance_types`/`capacity_type` sem impactar o control plane.
 - **State:** manter `versioning` habilitado no bucket S3 do backend (quando `01-`/esta stack migrarem para ele) permite recuperar uma versão anterior do `.tfstate`. Até lá (backend local, Seção 13.1), o `.tfstate` local desta stack deve ser tratado como artefato crítico, mesma recomendação já registrada para `00-bootstrap-stack-ai`.
@@ -340,12 +352,12 @@ Estimativas em ordem de grandeza para `sa-east-1`. Valores de EC2/EKS variam por
 
 ## 13. Handoff para DevOps Engineer Agent
 
-> **Escopo estrito desta implementação:** apenas os recursos da Seção 6.2, na nova stack `03-eks-stack-ai/`. **Não** inclui alterar `01-networking-stack-ai/` (adicionar tags de descoberta de Load Balancer, migrar backend) nem `00-bootstrap-stack-ai/` — ambas fora do escopo (Seção 14). **Não** inclui instalar add-ons, controllers, ou fazer qualquer deploy de aplicação/manifesto Kubernetes.
+> **Escopo estrito desta implementação:** apenas os recursos da Seção 6.2, na nova stack `02-eks-stack-ai/`. **Não** inclui alterar `01-networking-stack-ai/` (adicionar tags de descoberta de Load Balancer, migrar backend) nem `00-bootstrap-stack-ai/` — ambas fora do escopo (Seção 14). **Não** inclui instalar add-ons, controllers, ou fazer qualquer deploy de aplicação/manifesto Kubernetes. **A Revisão 1 (mudança de região) não altera este escopo** — como esta stack nunca foi implementada, uma futura implementação já deve nascer diretamente com `us-east-1`, seguindo os passos abaixo (já atualizados para a nova região).
 
 ### 13.1 Ordem de Implementação (respeitando dependências)
 
-0. **Pré-checagem obrigatória:** confirmar via `aws eks list-clusters --region sa-east-1` que nenhum cluster com o nome-alvo (`prd-eks-sa-east-1`) já existe. Confirmar via `aws ec2 describe-vpcs`/`describe-subnets` (filtrando pelas tags da Seção 6.2) que a VPC e as 4 sub-redes de `01-networking-stack-ai` existem e estão em estado `available` — se `01-` ainda não tiver sido de fato aplicada (`terraform apply` real, não apenas `plan`), **parar aqui**: esta stack não pode prosseguir sem a VPC real já provisionada. **Obter confirmação explícita do solicitante sobre a estimativa de custo da Seção 10** antes de prosseguir (critério de aceitação, Seção 13.3).
-1. Criar o diretório `03-eks-stack-ai/` na raiz do repositório, seguindo a estrutura de arquivos por domínio (`.claude/rules/terraform-naming-conventions.md`):
+0. **Pré-checagem obrigatória:** confirmar via `aws eks list-clusters --region us-east-1` que nenhum cluster com o nome-alvo (`prd-eks-us-east-1`) já existe. Confirmar via `aws ec2 describe-vpcs`/`describe-subnets` (`--region us-east-1`, filtrando pelas tags da Seção 6.2) que a VPC e as 4 sub-redes de `01-networking-stack-ai` existem e estão em estado `available` — se `01-` ainda não tiver sido de fato aplicada (`terraform apply` real, não apenas `plan`), **parar aqui**: esta stack não pode prosseguir sem a VPC real já provisionada. **Obter confirmação explícita do solicitante sobre a estimativa de custo da Seção 10** antes de prosseguir (critério de aceitação, Seção 13.3).
+1. Criar o diretório `02-eks-stack-ai/` na raiz do repositório, seguindo a estrutura de arquivos por domínio (`.claude/rules/terraform-naming-conventions.md`):
    - `main.tf` (ponto de entrada/índice)
    - `versions.tf` (`required_version = ">= 1.15.8"`; `hashicorp/aws` `~> 6.0`)
    - `providers.tf` (`provider "aws"` com `default_tags`)
@@ -362,12 +374,12 @@ Estimativas em ordem de grandeza para `sa-east-1`. Valores de EC2/EKS variam por
    - `eks.oidc.tf` (`aws_iam_openid_connect_provider.this`)
    - `eks.node-group.tf` (`aws_eks_node_group.this`, com `depends_on` explícito nas 3 policy attachments do node role)
    - `outputs.tf` (Seção 13.2)
-   - `terraform.tfvars.example` (versionado) e `terraform.tfvars` (gitignored, gerado a partir do example)
+   - `terraform.tfvars.example` (versionado, com `aws_region = "us-east-1"`) e `terraform.tfvars` (gitignored, gerado a partir do example)
    - `.gitignore` (mesmo padrão de `00-`/`01-`)
    - `README.md` (mesmo espírito de `01-`/`00-`: pré-requisitos, uso, validação pós-deploy, rollback, pontos de atenção — incluindo a nota explícita sobre o mecanismo de consumo de outputs de `01-` via data sources filtrados por tag, Seção 4/D4)
 2. Implementar os recursos da Seção 6.2 na ordem de dependência: IAM roles → KMS → Log Group → EKS Cluster → OIDC Provider → EKS Node Group.
-3. Rodar `terraform fmt -check` e `terraform validate` em `03-eks-stack-ai/`.
-4. Rodar `terraform plan -out=tfplan` e conferir explicitamente que: (a) os 3 data sources resolvem para a VPC/sub-redes corretas de `01-networking-stack-ai` (não vazios, não múltiplos resultados); (b) exatamente 1 `aws_eks_cluster`, 1 `aws_eks_node_group`, 2 `aws_iam_role`, 4 `aws_iam_role_policy_attachment`, 1 `aws_kms_key`, 1 `aws_kms_alias`, 1 `aws_cloudwatch_log_group`, 1 `aws_iam_openid_connect_provider` são planejados; (c) `enabled_cluster_log_types` contém os 5 tipos; (d) `encryption_config` está presente; (e) `public_access_cidrs` **não** contém `0.0.0.0/0`; (f) as tags obrigatórias (Seção 9) aparecem corretamente.
+3. Rodar `terraform fmt -check` e `terraform validate` em `02-eks-stack-ai/`.
+4. Rodar `terraform plan -out=tfplan` e conferir explicitamente que: (a) os 3 data sources resolvem para a VPC/sub-redes corretas de `01-networking-stack-ai` (não vazios, não múltiplos resultados); (b) exatamente 1 `aws_eks_cluster`, 1 `aws_eks_node_group`, 2 `aws_iam_role`, 4 `aws_iam_role_policy_attachment`, 1 `aws_kms_key`, 1 `aws_kms_alias`, 1 `aws_cloudwatch_log_group`, 1 `aws_iam_openid_connect_provider` são planejados; (c) `enabled_cluster_log_types` contém os 5 tipos; (d) `encryption_config` está presente; (e) `public_access_cidrs` **não** contém `0.0.0.0/0`; (f) as tags obrigatórias (Seção 9) aparecem corretamente; (g) os recursos são planejados em `us-east-1`, nas AZs `us-east-1a`/`us-east-1b` herdadas de `01-`.
 5. Submeter o `plan` à revisão por pares — obrigatório, mesmo racional de `00-`/`01-` (não há ambiente inferior no repositório) e **especialmente crítico aqui**, dado o custo mensal mais alto (Seção 10/11) e a complexidade de IAM/rede envolvida.
 6. Aplicar somente após a revisão do passo 5 **e** confirmação explícita do orçamento (passo 0).
 7. Após o `apply`, validar os testes da Seção 13.4 antes de considerar a stack pronta para uso por stacks de workload futuras.
@@ -377,7 +389,7 @@ Estimativas em ordem de grandeza para `sa-east-1`. Valores de EC2/EKS variam por
 
 | Variável | Tipo | Descrição |
 |---|---|---|
-| `aws_region` | `string` | Região AWS onde a stack é aplicada (`"sa-east-1"`). |
+| `aws_region` | `string` | Região AWS onde a stack é aplicada (`"us-east-1"` — atualizado na Revisão 1, antes `"sa-east-1"`). |
 | `project_name` | `string` | Nome lógico do projeto (`"eks"`). |
 | `networking` | `object({ stack_name = string, environment = string })` | Valores usados para filtrar os data sources de VPC/sub-redes de `01-networking-stack-ai` (Seção 4, D4). Sugerido: `{ stack_name = "01-networking-stack-ai", environment = "prd" }`. |
 | `eks_cluster` | `object({ kubernetes_version = string, endpoint_public_access_cidrs = list(string), enabled_log_types = list(string), log_retention_days = number })` | `kubernetes_version = "1.34"` (Seção 4, D1). `endpoint_public_access_cidrs`: **obrigatório, sem default**, com `validation` que rejeita `"0.0.0.0/0"` (Seção 4, D2) — deve conter o(s) CIDR(s) reais de onde o `devops-engineer`/CI acessará a API. `enabled_log_types`: sugerido os 5 tipos completos. `log_retention_days`: sugerido `90`. |
@@ -389,17 +401,17 @@ Estimativas em ordem de grandeza para `sa-east-1`. Valores de EC2/EKS variam por
 
 ### 13.3 Critérios de Aceitação (Definition of Done)
 
-- [ ] Pré-checagem do passo 0 (Seção 13.1) executada e documentada (cluster-alvo não existe; VPC/sub-redes de `01-` confirmadas `available`; orçamento da Seção 10 aprovado explicitamente pelo solicitante).
+- [ ] Pré-checagem do passo 0 (Seção 13.1) executada e documentada (cluster-alvo não existe em `us-east-1`; VPC/sub-redes de `01-` confirmadas `available`; orçamento da Seção 10 aprovado explicitamente pelo solicitante).
 - [ ] Todos os recursos da Seção 6.2 provisionados via Terraform (sem cliques no console).
-- [ ] `03-eks-stack-ai/` segue a estrutura de arquivos da Seção 13.1, com `override.tf` local temporário (mesmo padrão de `01-`) e `backend.tf` parcial S3 aguardando o mesmo bucket do ADR-0002.
+- [ ] `02-eks-stack-ai/` segue a estrutura de arquivos da Seção 13.1, com `override.tf` local temporário (mesmo padrão de `01-`) e `backend.tf` parcial S3 aguardando o mesmo bucket do ADR-0002.
 - [ ] Tags obrigatórias (Seção 9) aplicadas em 100% dos recursos, incluindo `DataClassification = "confidential"`.
 - [ ] `terraform validate` e `terraform fmt -check` passam sem erros.
 - [ ] `terraform plan` mostra exatamente os recursos listados no passo 4 da Seção 13.1 — revisado explicitamente por um par.
-- [ ] Cluster criado com `version = "1.34"`, `enabled_cluster_log_types` contendo os 5 tipos, `encryption_config` presente apontando para a CMK dedicada.
-- [ ] Node Group criado com `capacity_type = "ON_DEMAND"`, `instance_types = ["t3.medium"]`, exatamente 2 nós em estado `ACTIVE`/`Ready` após o `apply`.
+- [ ] Cluster criado em `us-east-1` com `version = "1.34"`, `enabled_cluster_log_types` contendo os 5 tipos, `encryption_config` presente apontando para a CMK dedicada.
+- [ ] Node Group criado com `capacity_type = "ON_DEMAND"`, `instance_types = ["t3.medium"]`, exatamente 2 nós em estado `ACTIVE`/`Ready` após o `apply`, nas AZs `us-east-1a`/`us-east-1b`.
 - [ ] `public_access_cidrs` do cluster **não** contém `0.0.0.0/0` — validado por leitura do `plan`/estado aplicado, não apenas assumido.
 - [ ] Worker nodes provisionados exclusivamente nas sub-redes privadas de `01-networking-stack-ai` (sem IP público).
-- [ ] Logs do control plane sendo entregues ativamente ao CloudWatch Logs (`/aws/eks/prd-eks-sa-east-1/cluster`), com a retenção configurada.
+- [ ] Logs do control plane sendo entregues ativamente ao CloudWatch Logs (`/aws/eks/prd-eks-us-east-1/cluster`), com a retenção configurada.
 - [ ] IAM OIDC Provider criado e associado ao issuer correto do cluster.
 - [ ] Nenhuma IAM policy customizada com `Resource: "*"` ou `Action: "*"` foi criada — apenas policies gerenciadas oficiais da AWS.
 - [ ] `terraform plan` subsequente ao `apply` retorna "No changes" (sem drift).
@@ -409,16 +421,16 @@ Estimativas em ordem de grandeza para `sa-east-1`. Valores de EC2/EKS variam por
 
 ### 13.4 Testes de Validação Pós-Deploy
 
-- `aws eks describe-cluster --name prd-eks-sa-east-1 --region sa-east-1` — confirmar `status: ACTIVE`, `version: "1.34"`, `resourcesVpcConfig.endpointPublicAccess/endpointPrivateAccess` e `publicAccessCidrs` corretos, `encryptionConfig` presente.
-- `aws eks list-nodegroups --cluster-name prd-eks-sa-east-1` + `aws eks describe-nodegroup` — confirmar exatamente 1 node group, `status: ACTIVE`, `capacityType: ON_DEMAND`, `instanceTypes: ["t3.medium"]`, `scalingConfig.desiredSize: 2`.
-- `aws eks describe-cluster --query "cluster.logging"` — confirmar os 5 tipos de log habilitados.
-- `aws logs describe-log-groups --log-group-name-prefix /aws/eks/prd-eks-sa-east-1/cluster` — confirmar existência e retenção configurada; `aws logs describe-log-streams` — confirmar entrega ativa de logs.
-- `aws kms describe-key`/`aws kms get-key-rotation-status` — confirmar a CMK dedicada e rotação habilitada.
+- `aws eks describe-cluster --name prd-eks-us-east-1 --region us-east-1` — confirmar `status: ACTIVE`, `version: "1.34"`, `resourcesVpcConfig.endpointPublicAccess/endpointPrivateAccess` e `publicAccessCidrs` corretos, `encryptionConfig` presente.
+- `aws eks list-nodegroups --cluster-name prd-eks-us-east-1 --region us-east-1` + `aws eks describe-nodegroup --region us-east-1` — confirmar exatamente 1 node group, `status: ACTIVE`, `capacityType: ON_DEMAND`, `instanceTypes: ["t3.medium"]`, `scalingConfig.desiredSize: 2`.
+- `aws eks describe-cluster --region us-east-1 --query "cluster.logging"` — confirmar os 5 tipos de log habilitados.
+- `aws logs describe-log-groups --region us-east-1 --log-group-name-prefix /aws/eks/prd-eks-us-east-1/cluster` — confirmar existência e retenção configurada; `aws logs describe-log-streams --region us-east-1` — confirmar entrega ativa de logs.
+- `aws kms describe-key`/`aws kms get-key-rotation-status` (`--region us-east-1`) — confirmar a CMK dedicada e rotação habilitada.
 - `aws iam list-open-id-connect-providers` + `aws iam get-open-id-connect-provider` — confirmar o OIDC provider associado ao issuer correto do cluster.
-- `aws ec2 describe-instances --filters Name=tag:aws:eks:cluster-name,Values=prd-eks-sa-east-1` — confirmar que as instâncias dos worker nodes **não** têm IP público associado.
-- `aws resourcegroupstaggingapi get-resources --tag-filters Key=StackName,Values=03-eks-stack-ai` — confirmar que 100% dos recursos estão tageados corretamente.
+- `aws ec2 describe-instances --region us-east-1 --filters Name=tag:aws:eks:cluster-name,Values=prd-eks-us-east-1` — confirmar que as instâncias dos worker nodes **não** têm IP público associado.
+- `aws resourcegroupstaggingapi get-resources --region us-east-1 --tag-filters Key=StackName,Values=02-eks-stack-ai` — confirmar que 100% dos recursos estão tageados corretamente.
 - Rodar `terraform plan` após o `apply` e confirmar saída "No changes" (sem drift).
-- **Não** instalar `kubectl`/aplicar manifestos como parte desta validação — fora do escopo (Seção 14). Validação de conectividade ao endpoint da API (`aws eks update-kubeconfig` + `kubectl get nodes`) é aceitável apenas para confirmar que os 2 nodes aparecem como `Ready`, sem ir além disso.
+- **Não** instalar `kubectl`/aplicar manifestos como parte desta validação — fora do escopo (Seção 14). Validação de conectividade ao endpoint da API (`aws eks update-kubeconfig --region us-east-1` + `kubectl get nodes`) é aceitável apenas para confirmar que os 2 nodes aparecem como `Ready`, sem ir além disso.
 
 ## 14. Non-goals / Fora do Escopo
 
@@ -433,14 +445,15 @@ Estimativas em ordem de grandeza para `sa-east-1`. Valores de EC2/EKS variam por
 - **Deploy de qualquer aplicação, manifesto Kubernetes, namespace customizado ou Helm chart** — esta ADR entrega apenas a infraestrutura do cluster, não workloads.
 - **Observabilidade além do control plane logging solicitado** (Container Insights, Prometheus/Grafana, X-Ray, OpenTelemetry) — não solicitado explicitamente; possível melhoria futura.
 - **AWS Network Firewall, AWS WAF, ou Security Groups customizados adicionais** ao gerenciado automaticamente pelo EKS — não incluídos nesta ADR.
-- **Multi-região e Disaster Recovery do cluster** — não solicitados; esta stack cobre apenas `sa-east-1`, mesma região das stacks anteriores.
+- **Multi-região e Disaster Recovery do cluster** — não solicitados; esta stack cobre apenas `us-east-1` (Revisão 1), mesma região das stacks anteriores.
 - **Definição de controles específicos de compliance regulatório** — nenhum framework foi indicado (Seção 2).
 - Uso de qualquer módulo Terraform de terceiros/comunidade nesta stack (Seção 4).
+- **(Nova — Revisão 1) Reavaliação de qualquer outra decisão arquitetural em função da nova região** (versão do Kubernetes D1, acesso ao endpoint D2, envelope encryption D3, mecanismo de consumo D4, contagem/tamanho de nodes, estrutura de código) — explicitamente fora do escopo; esta revisão troca apenas a região e os valores diretamente derivados dela.
 
 ## 15. Referências
 
-- [ADR-0001 — Stack de Rede Fundacional (VPC 10.0.0.0/24) em Terraform](./ADR-0001-networking-stack-vpc.md) — origem da VPC/sub-redes consumidas por esta ADR (Seção 4, D4); Premissa 14 (NAT Gateway único, herdada como risco na Seção 11 desta ADR).
-- [ADR-0002 — Stack de Bootstrap — Bucket S3 para Backend Remoto do Terraform](./ADR-0002-bootstrap-stack-remote-backend.md) — bucket de backend remoto ainda não consumido por nenhuma stack (incluindo esta), Seção 4/D4.
+- [ADR-0001 — Stack de Rede Fundacional (VPC 10.0.0.0/24) em Terraform](./ADR-0001-networking-stack-vpc.md) — origem da VPC/sub-redes consumidas por esta ADR (Seção 4, D4); Premissa 14 (NAT Gateway único, herdada como risco na Seção 11 desta ADR); Revisão 6 do ADR-0001 registra a mesma mudança de região aplicada em conjunto.
+- [ADR-0002 — Stack de Bootstrap — Bucket S3 para Backend Remoto do Terraform](./ADR-0002-bootstrap-stack-remote-backend.md) — bucket de backend remoto ainda não consumido por nenhuma stack (incluindo esta), Seção 4/D4; Revisão 1 do ADR-0002 registra a mesma mudança de região aplicada em conjunto.
 - [`.claude/rules/terraform-naming-conventions.md`](../../.claude/rules/terraform-naming-conventions.md) — padrão de arquivos, variáveis agregadas por domínio e ausência de `default` em `variables.tf`, seguido na Seção 13.1.
 - [AWS Well-Architected Framework](https://aws.amazon.com/architecture/well-architected/)
 - [Amazon EKS Best Practices Guide — Identity and Access Management](https://docs.aws.amazon.com/eks/latest/best-practices/identity-and-access-management.html) — base da decisão de endpoint público+privado com CIDR restrito (Seção 4, D2).
@@ -453,3 +466,5 @@ Estimativas em ordem de grandeza para `sa-east-1`. Valores de EC2/EKS variam por
 - [Recurso `aws_eks_node_group` (registry)](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eks_node_group)
 - [Recurso `aws_iam_openid_connect_provider` (registry)](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_openid_connect_provider) — confirma `thumbprint_list` opcional (Premissa 9).
 - [Módulo comunitário `terraform-aws-modules/eks/aws` (registry, v21.25.0 — validado via `terraform-mcp search_modules`, avaliado e descartado na Seção 4)](https://registry.terraform.io/modules/terraform-aws-modules/eks/aws/21.25.0)
+- [Amazon EC2 — AWS Regions and Availability Zones (us-east-1: 6 AZs; `t3.medium` confirmado disponível em `us-east-1a`/`us-east-1b`, validado via `aws-mcp`/`ec2:DescribeInstanceTypeOfferings` em 2026-08-30)](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-regions-availability-zones.html) — base da Premissa 2/Revisão 1.
+- [Amazon EC2 On-Demand Pricing](https://aws.amazon.com/ec2/pricing/on-demand/) — base do recálculo de custo de `t3.medium` para `us-east-1` na Seção 10/Revisão 1.

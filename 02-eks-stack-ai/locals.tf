@@ -48,12 +48,12 @@ locals {
   common_tags = merge(
     {
       Environment        = local.environment
-      Owner              = "unassigned"
-      CostCenter         = "unassigned"
+      Owner              = "Leopoldo Peixoto Cardoso"
+      CostCenter         = "workshop-devops-na-nuvem"
       Project            = var.project_name
       ManagedBy          = "terraform"
       DataClassification = "confidential"
-      StackName          = "03-eks-stack-ai"
+      StackName          = "02-eks-stack-ai"
     },
     var.tags
   )

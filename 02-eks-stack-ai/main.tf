@@ -1,7 +1,7 @@
 ############################################################################
 # main.tf
 #
-# Ponto de entrada da stack 03-eks-stack-ai (ADR-0003).
+# Ponto de entrada da stack 02-eks-stack-ai (ADR-0003).
 #
 # Esta stack nao usa blocos `module` (ADR-0003 Secao 4 / 13.1) — todos os
 # recursos sao nativos do provider hashicorp/aws, organizados em arquivos

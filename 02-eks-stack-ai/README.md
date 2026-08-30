@@ -1,4 +1,4 @@
-# 03-eks-stack-ai
+# 02-eks-stack-ai
 
 Stack de cluster Amazon EKS, implementada conforme
 [ADR-0003](../docs/adr/ADR-0003-eks-stack.md) (ver Seção 13 — Handoff).
@@ -95,7 +95,7 @@ partir de `terraform.tfvars.example`, ignorado pelo `.gitignore` —
 ## Uso
 
 ```bash
-cd 03-eks-stack-ai
+cd 02-eks-stack-ai
 
 # 0) Pré-checagem obrigatória (ADR-0003 Seção 13.1, passo 0) — executar
 #    ANTES de prosseguir. Confirmar que o cluster-alvo ainda não existe e
@@ -142,7 +142,7 @@ aws kms describe-key --key-id alias/prd-eks-secrets-sa-east-1 --region sa-east-1
 aws kms get-key-rotation-status --key-id alias/prd-eks-secrets-sa-east-1 --region sa-east-1
 aws iam list-open-id-connect-providers
 aws ec2 describe-instances --region sa-east-1 --filters Name=tag:aws:eks:cluster-name,Values=prd-eks-sa-east-1
-aws resourcegroupstaggingapi get-resources --tag-filters Key=StackName,Values=03-eks-stack-ai --region sa-east-1
+aws resourcegroupstaggingapi get-resources --tag-filters Key=StackName,Values=02-eks-stack-ai --region sa-east-1
 
 terraform plan   # deve retornar "No changes"
 ```
@@ -200,7 +200,7 @@ parte desta validação (fora do escopo, ADR-0003 Seção 14).
 - **Sub-redes de `01-` sem tags de descoberta para AWS Load Balancer
   Controller** (`kubernetes.io/role/elb`/`internal-elb`) — não existem
   hoje e não são adicionadas por esta stack (fora do escopo de
-  `03-eks-stack-ai`, exigiria revisão de `01-networking-stack-ai`). Uma
+  `02-eks-stack-ai`, exigiria revisão de `01-networking-stack-ai`). Uma
   stack/ADR futura de workload que precise de Ingress/LoadBalancer deverá
   tratar isso primeiro.
 - **Acoplamento a tags de `01-networking-stack-ai`:** se uma revisão
