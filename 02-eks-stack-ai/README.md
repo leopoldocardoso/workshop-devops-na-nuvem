@@ -213,18 +213,20 @@ parte desta validação (fora do escopo, ADR-0003 Seção 14).
   (~USD 210–275) e a complexidade de IAM/rede envolvida.
 - **Custo mensal significativamente maior que `00-`/`01-`** — validar
   explicitamente com o solicitante antes do `apply` real (Seção 13.3).
-- **Deleção acidental do cluster:** implementado `lifecycle { prevent_destroy
-  = true }` em `aws_eks_cluster.this` (`eks.tf`), conforme avaliação
-  explicitamente delegada ao `devops-engineer` pelo ADR-0003 (Seção 11).
-  **Efeito colateral esperado:** qualquer `plan`/`apply` futuro que force a
-  substituição deste recurso (ex.: downgrade de `version` — não suportado
-  pelo EKS de qualquer forma —, ou mudança de `kubernetes_network_config`)
-  também será bloqueado por este lifecycle. Nesse cenário, remover a linha
-  `prevent_destroy = true` deliberadamente, em um commit próprio e
-  revisado por par, é um pré-requisito antes de aplicar a mudança — não
-  remover "no automático" só para destravar um `apply`. Independentemente
-  disso, `terraform destroy`/`aws eks delete-cluster` nunca deve ser
-  executado sem confirmação explícita em sessão.
+- **Deleção acidental do cluster:** `aws_eks_cluster.this` (`eks.tf`) teve
+  `lifecycle { prevent_destroy = true }` conforme avaliação explicitamente
+  delegada ao `devops-engineer` pelo ADR-0003 (Seção 11), **removido em
+  2026-08-30** com autorização explícita do operador em sessão (via
+  `/terraform-destroy`) para viabilizar um destroy real da stack — ver
+  `docs/deployments/02-eks-stack-ai.md` para o registro desse destroy.
+  A trava não existe mais no código atual. Se essa proteção for desejada
+  novamente (ex.: antes de um próximo apply em `prd`), reintroduzir o
+  bloco `lifecycle { prevent_destroy = true }` deliberadamente, em um
+  commit próprio e revisado por par — não adicionar/remover "no
+  automático" apenas para destravar um `apply`/`destroy`. Independentemente
+  da presença ou não desse lifecycle, `terraform destroy`/
+  `aws eks delete-cluster` nunca deve ser executado sem confirmação
+  explícita em sessão.
 - **Backend S3:** ainda não migrado (mesmo estado de `01-` na época do
   ADR-0003) — `override.tf` mantém o backend local até uma migração futura
   e deliberada, fora do escopo desta entrega.
