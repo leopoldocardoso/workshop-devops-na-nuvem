@@ -11,16 +11,10 @@
 # sem essa dependencia, o EKS pode falhar ao destruir a infraestrutura EC2
 # gerenciada (Security Groups) na deleção do cluster.
 #
-# lifecycle.prevent_destroy = true (ADR-0003 Secao 11, risco "Delecao
-# acidental do cluster" — avaliacao explicitamente delegada ao
-# devops-engineer na implementacao): bloqueia `terraform destroy`/um
-# `apply` que substitua este recurso enquanto o bloco permanecer presente.
-# ATENCAO: uma mudanca legitima que force replacement (ex.: downgrade de
-# versao — nao suportado; ou alteracao de kubernetes_network_config /
-# vpc_config.subnet_ids que force recriacao) tambem sera bloqueada por
-# este lifecycle — remover a linha deliberadamente, em um commit proprio
-# e revisado, antes de aplicar uma mudanca desse tipo (ver README.md >
-# Pontos de Atencao / Rollback).
+# lifecycle.prevent_destroy removido em 2026-08-30 (autorizacao explicita
+# do operador em sessao, via /terraform-destroy) para permitir o destroy
+# real da stack. Reavaliar se deve voltar antes de um proximo apply em
+# prd (ADR-0003 Secao 11, risco "Delecao acidental do cluster").
 ############################################################################
 
 resource "aws_eks_cluster" "this" {
@@ -68,8 +62,4 @@ resource "aws_eks_cluster" "this" {
     aws_iam_role_policy_attachment.cluster_eks_cluster_policy,
     aws_cloudwatch_log_group.cluster,
   ]
-
-  lifecycle {
-    prevent_destroy = true
-  }
 }
