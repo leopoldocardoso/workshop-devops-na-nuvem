@@ -34,7 +34,8 @@ Preferred path — the `terraform-deploy` skill driver (`.claude/skills/terrafor
 Key behaviors of the driver (see `.claude/skills/terraform-deploy/SKILL.md` for the full rationale):
 - **Applies automatically with `-auto-approve`, no manual pause between plan and apply** — this is a deliberate, operator-confirmed policy (2026-08-01), not an oversight. Running the driver for real (not `--dry-run`/`--help`) still needs the operator's explicit authorization per invocation.
 - A stack with `override.tf` (local backend) is always touched. A stack with `backend.hcl` (real S3 backend) is skipped **by default** — fmt/init/validate/plan/apply only run against it if `--allow-remote-apply` is passed explicitly for that invocation (added 2026-08-28), in which case `terraform init` also gets `-backend-config=backend.hcl` injected automatically.
-- After a successful apply, it generates/overwrites `docs/deployments/<stack>.md` (apply log, `terraform output -json`, `terraform state list`, AWS identity, timestamp).
+- Between `plan` and `apply` it runs `infracost scan` on the plan JSON (added 2026-09-21) and prints the monthly estimate per resource. This is **informational only** — it never blocks the apply, and a missing/failing `infracost` just produces a warning. Since the apply is automatic, this is the only place the cost of a diff gets recorded before the resources exist.
+- After a successful apply, it generates/overwrites `docs/deployments/<stack>.md` (apply log, `terraform output -json`, `terraform state list`, AWS identity, timestamp, and the Infracost estimate above).
 - `tfplan` files are written to a `mktemp -d` outside the repo, never committed.
 
 Its counterpart, `terraform-destroy` (`.claude/skills/terraform-destroy/destroy.sh`), wraps fmt → init → validate → `plan -destroy` with the **opposite default**: it always stops after printing the destroy plan and only runs `terraform destroy -auto-approve` when `--auto-approve` is passed explicitly for that specific invocation — never persisted, never something an agent should add on its own "to unblock" a destroy, even if an ADR mentions destroying the stack. Same remote-backend gate as `terraform-deploy` (`--allow-remote-apply`, must be combined with `--auto-approve` to actually destroy a `backend.hcl` stack — passing it alone only unlocks the preview). After a real destroy it **prepends** a destroy record to `docs/deployments/<stack>.md`, keeping the prior deploy history below it rather than overwriting the file.
@@ -45,6 +46,10 @@ Its counterpart, `terraform-destroy` (`.claude/skills/terraform-destroy/destroy.
 .claude/skills/terraform-destroy/destroy.sh --allow-remote-apply 01-networking-stack-ai   # same, for a backend.hcl stack
 .claude/skills/terraform-destroy/destroy.sh --auto-approve 02-eks-stack-ai            # actually destroy (local-backend stack)
 ```
+
+### Cost estimates (Infracost)
+
+`infracost` (v2 CLI, Homebrew) is installed and authenticated on this machine. Run `infracost scan` from the **repo root** — it auto-discovers every `NN-*-stack*/` project and its `terraform.tfvars`, so there is no `infracost.yml` (the v2 `scan` command has no `--config-file`). `infracost inspect --group-by resource` / `--failing` read the last scan's cache and must run from the same directory the scan ran in (no `--path`). Known false positive: the "EKS - consider upgrading version" FinOps policy fires on `02-eks-stack-ai` even though it runs a current Kubernetes version. Estimates are 730 h/month list prices and exclude usage-based components (NAT data processing, ECR storage, etc.).
 
 A resource can additionally carry `lifecycle.prevent_destroy = true` (see `02-eks-stack-ai` below) — that blocks `plan -destroy` regardless of `--auto-approve` until removed from the `.tf` file in its own reviewed commit.
 

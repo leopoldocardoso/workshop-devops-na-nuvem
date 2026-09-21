@@ -2,8 +2,15 @@
 #
 # Driver do skill terraform-deploy: para uma ou mais stacks numeradas
 # (NN-*-stack*/) deste repo, roda fmt -> init -> validate -> plan -> print
-# do plan -> apply -auto-approve -> gera documentacao em docs/deployments/,
-# em sequencia, sem pausa manual.
+# do plan -> estimativa de custo (infracost) -> apply -auto-approve -> gera
+# documentacao em docs/deployments/, em sequencia, sem pausa manual.
+#
+# A estimativa de custo roda `infracost scan` sobre o JSON do plan e e
+# puramente INFORMATIVA: nunca bloqueia o apply e, se o infracost nao
+# estiver no PATH (ou falhar), o driver apenas avisa e segue. O resultado
+# vai para o log e para a secao "Estimativa de custo" do
+# docs/deployments/<stack>.md — como o apply e automatico, este e o unico
+# ponto em que o custo do diff fica registrado antes do recurso existir.
 #
 # Stacks com backend remoto real configurado (backend.hcl presente) sao
 # ignoradas por padrao (nunca fmt/init/validate/plan/apply) — este driver
@@ -30,6 +37,7 @@ usage() {
 Uso: deploy.sh [--dry-run] [--allow-remote-apply] [--help] [stack-dir ...]
 
 Para cada stack alvo: terraform fmt, init, validate, plan (print do plan),
+estimativa de custo do plan via infracost (informativa, nao bloqueia),
 apply -auto-approve, geracao de documentacao em docs/deployments/<stack>.md.
 Sem pausa manual entre plan e apply.
 
@@ -165,8 +173,9 @@ if [[ $DRY_RUN -eq 1 ]]; then
     echo "        3. terraform validate"
     echo "        4. terraform plan -input=false -out=<tmpdir>/$name/tfplan -detailed-exitcode"
     echo "        5. terraform show <plan> (print do plan)"
-    echo "        6. terraform apply -auto-approve <plan>  (SEM pausa manual)"
-    echo "        7. gerar docs/deployments/$name.md (outputs, recursos, log do apply)"
+    echo "        6. terraform show -json <plan> + infracost scan (estimativa de custo; informativa, nao bloqueia)"
+    echo "        7. terraform apply -auto-approve <plan>  (SEM pausa manual)"
+    echo "        8. gerar docs/deployments/$name.md (outputs, recursos, log do apply, estimativa de custo)"
   done
   exit 0
 fi
@@ -186,17 +195,57 @@ if command -v aws >/dev/null 2>&1; then
   fi
 fi
 
+INFRACOST_AVAILABLE=0
+if command -v infracost >/dev/null 2>&1; then
+  INFRACOST_AVAILABLE=1
+  echo "==> infracost encontrado ($(infracost --version 2>/dev/null | head -1)): estimativa de custo sera gerada por plan."
+else
+  echo "AVISO: infracost nao encontrado no PATH — a estimativa de custo sera pulada (nao bloqueia o deploy)." >&2
+fi
+
 RUN_DIR="$(mktemp -d -t terraform-deploy.XXXXXX)"
 echo "==> Plan files desta execucao ficarao fora do repo, em: $RUN_DIR"
 
 DOCS_DIR="$REPO_ROOT/docs/deployments"
+
+# Estimativa de custo do plan via infracost. Escreve o resultado (resumo +
+# custo por recurso) em $RUN_DIR/<name>/infracost.txt e ecoa no log.
+# Puramente informativa: qualquer falha vira AVISO e o retorno e sempre 0 —
+# nunca bloqueia o apply. O scan roda dentro de $RUN_DIR/<name> (fora do
+# repo) para que o cache do infracost nao seja gravado na stack.
+estimate_cost() {
+  local stack_dir="$1" name="$2" plan_file="$3"
+  local work_dir="$RUN_DIR/$name" plan_json="$RUN_DIR/$name/tfplan.json" out_file="$RUN_DIR/$name/infracost.txt"
+
+  if [[ $INFRACOST_AVAILABLE -eq 0 ]]; then
+    echo "infracost nao disponivel nesta execucao — estimativa de custo nao gerada." > "$out_file"
+    return 0
+  fi
+
+  echo "==> [$name] Estimativa de custo do plan (infracost, informativa):"
+  if ! ( cd "$stack_dir" && terraform show -json "$plan_file" > "$plan_json" ); then
+    echo "AVISO [$name]: terraform show -json falhou; estimativa de custo pulada." >&2
+    echo "terraform show -json falhou — estimativa de custo nao gerada." > "$out_file"
+    return 0
+  fi
+
+  if ! ( cd "$work_dir" \
+      && infracost scan --no-color tfplan.json 2>&1 | grep -v -E "^(Update:|  \\$ brew|What's next\\?|  →)" \
+      && echo \
+      && infracost inspect --no-color --group-by resource 2>&1 | grep -v -E "^(Update:|  \\$ brew)" ) > "$out_file"; then
+    echo "AVISO [$name]: infracost falhou; estimativa de custo incompleta (ver abaixo)." >&2
+  fi
+  cat "$out_file"
+  echo "----------------------------------------------------------------"
+  return 0
+}
 
 # Gera/atualiza docs/deployments/<name>.md com o resultado do apply mais
 # recente: identidade AWS, log do apply, outputs e recursos no state.
 # Roda so apos um apply bem-sucedido (nunca contra stack ignorada/falha).
 generate_doc() {
   local stack_dir="$1" name="$2" apply_log="$3"
-  local doc_file timestamp tf_version aws_identity outputs_json resources
+  local doc_file timestamp tf_version aws_identity outputs_json resources cost_estimate
 
   mkdir -p "$DOCS_DIR"
   doc_file="$DOCS_DIR/$name.md"
@@ -205,6 +254,7 @@ generate_doc() {
   aws_identity="$(aws sts get-caller-identity --query '[Account,Arn]' --output text 2>/dev/null || echo "indisponivel")"
   outputs_json="$(cd "$stack_dir" && terraform output -json 2>/dev/null || echo '{}')"
   resources="$(cd "$stack_dir" && terraform state list 2>/dev/null)"
+  cost_estimate="$(cat "$RUN_DIR/$name/infracost.txt" 2>/dev/null || echo "estimativa de custo nao gerada nesta execucao.")"
 
   {
     echo "# Deployment: $name"
@@ -234,6 +284,17 @@ generate_doc() {
     echo
     echo '```'
     echo "$resources"
+    echo '```'
+    echo
+    echo "## Estimativa de custo do plan (infracost)"
+    echo
+    echo "> Gerada por \`infracost scan\` sobre o JSON do plan aplicado acima, ANTES"
+    echo "> do apply. Custo mensal estimado (730 h/mes) a partir da lista de precos"
+    echo "> da AWS; nao inclui componentes por uso (trafego, storage variavel etc.)."
+    echo "> Informativa — nao bloqueia o deploy."
+    echo
+    echo '```'
+    echo "$cost_estimate"
     echo '```'
   } > "$doc_file"
 
@@ -321,6 +382,8 @@ run_stack() {
   echo "==> [$name] Plan:"
   ( cd "$stack_dir" && terraform show -no-color "$plan_file" )
   echo "----------------------------------------------------------------"
+
+  estimate_cost "$stack_dir" "$name" "$plan_file"
 
   echo "==> [$name] Aplicando (auto-approve, sem pausa manual)..."
   local apply_log="$RUN_DIR/$name/apply.log"

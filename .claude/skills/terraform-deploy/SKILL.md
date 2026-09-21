@@ -24,9 +24,12 @@ relativos à raiz do repo).
 ## O que este skill faz
 
 Para cada stack alvo com backend local (`override.tf` presente):
-`terraform fmt -check` → `init` → `validate` → `plan` → `apply
--auto-approve` → gera `docs/deployments/<stack>.md` com o resultado.
-**Sem pausa manual entre plan e apply.** Stacks com backend remoto real
+`terraform fmt -check` → `init` → `validate` → `plan` → estimativa de
+custo do plan (`infracost scan`, informativa) → `apply -auto-approve` →
+gera `docs/deployments/<stack>.md` com o resultado.
+**Sem pausa manual entre plan e apply.** A estimativa de custo nunca
+bloqueia: se o `infracost` não estiver no PATH ou falhar, o driver avisa
+e segue para o apply. Stacks com backend remoto real
 (`backend.hcl` presente) são ignoradas por padrão — nunca sofrem
 fmt/init/validate/plan/apply por este driver, a menos que
 `--allow-remote-apply` seja passado explicitamente nesta chamada (ver
@@ -70,6 +73,10 @@ Após um `apply` bem-sucedido com mudanças, o driver escreve/sobrescreve
 - Log completo do `terraform apply` (o que foi criado/alterado/destruído).
 - `terraform output -json` da stack.
 - `terraform state list` (inventário de recursos após o apply).
+- Estimativa de custo do plan aplicado (`infracost scan` sobre o JSON do
+  plan + `infracost inspect --group-by resource`): custo mensal estimado
+  por recurso, gerado ANTES do apply. Como o apply é automático, este é o
+  único registro do custo do diff anterior à existência do recurso.
 
 O arquivo é **sobrescrito a cada deploy** — reflete sempre o estado da
 última aplicação, não um histórico acumulado. Se a stack não tiver
@@ -82,6 +89,12 @@ não é regenerada.
   stack; `01-networking-stack-ai` exige `>= 1.15.8`).
 - Credenciais AWS configuradas no ambiente (`aws sts get-caller-identity`
   deve funcionar) — necessárias a partir do passo `init`/`plan`/`apply`.
+- Opcional: `infracost` (v2+) no PATH e autenticado (`infracost auth
+  login` ou API key em `~/.config/infracost/credentials.yml`) para a
+  estimativa de custo. Sem ele, o passo é pulado com aviso. Para uma
+  visão consolidada fora do deploy, `infracost scan` rodado da raiz do
+  repo descobre todas as stacks `NN-*-stack*/` e seus `terraform.tfvars`
+  automaticamente (não há arquivo de configuração).
 - Bucket S3 do backend real já existente, com `versioning`/SSE
   habilitados, se a stack usar `backend.hcl` (fora do escopo deste
   skill e da stack — depende de uma futura `00-bootstrap`; e mesmo
