@@ -1,0 +1,9 @@
+.git
+bin/
+obj/
+*.user
+.vs/
+.vscode/
+.env
+.env.*
+Properties/launchSettings.json
