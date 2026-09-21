@@ -53,8 +53,7 @@ Estrutura de arquivos e variáveis em conformidade com
 |---|---|
 | `main.tf` | Ponto de entrada da stack (nenhum recurso; índice de onde cada domínio está implementado). |
 | `versions.tf` | Terraform CLI (`>= 1.15.8`) e provider `hashicorp/aws` (`~> 6.0`, testado com `6.62.0`). |
-| `backend.tf` | Backend S3 (configuração parcial, `use_lockfile = true`), aguardando o bucket do ADR-0002. |
-| `override.tf` | Backend **local temporário** (gitignored) — mesmo padrão histórico de `01-networking-stack-ai` antes de sua migração. |
+| `backend.tf` | Backend S3 (configuração parcial, `use_lockfile = true`, `encrypt = true`); `bucket`/`key`/`region` vêm do `backend.hcl` (gitignored, gerado a partir de `backend.hcl.example`). Migrado do backend local em 2026-09-21. |
 | `providers.tf` | `provider "aws"` com `default_tags`. |
 | `variables.tf` | Variáveis de input agrupadas por domínio (`networking`, `eks_cluster`, `eks_secrets_encryption`, `eks_node_group`) + independentes (`aws_region`, `project_name`, `tags`); nenhuma declara `default`. |
 | `data.tf` | `data.aws_vpc.networking`, `data.aws_subnets.private`/`public` (ADR-0003 Seção 4/D4), `data.aws_caller_identity.current`. |
@@ -109,9 +108,10 @@ aws ec2 describe-subnets --region sa-east-1 --filters Name=tag:StackName,Values=
 cp terraform.tfvars.example terraform.tfvars
 # editar terraform.tfvars — eks_cluster.endpoint_public_access_cidrs, tags
 
-# 2) fmt + init (backend LOCAL via override.tf, sem -backend-config)
+# 2) fmt + init (backend S3 do ADR-0002 — bucket/key/region vêm do backend.hcl)
+cp backend.hcl.example backend.hcl   # ajustar bucket e region (us-east-1)
 terraform fmt -check
-terraform init
+terraform init -backend-config=backend.hcl
 
 # 3) validate
 terraform validate
@@ -172,10 +172,9 @@ parte desta validação (fora do escopo, ADR-0003 Seção 14).
   a conclusão do upgrade.
 - **Node Group:** pode ser destruído e recriado independentemente do
   cluster (não força recriação do `aws_eks_cluster`).
-- **State:** enquanto o backend for local (`override.tf`), o `.tfstate`
-  local desta stack deve ser tratado como artefato crítico. Após migração
-  para o backend S3 do ADR-0002, o `versioning` do bucket permite
-  recuperar uma versão anterior do `.tfstate`.
+- **State:** desde 2026-09-21 o state fica no bucket S3 do ADR-0002
+  (`key = 02-eks-stack-ai/prd/terraform.tfstate`); o `versioning` do
+  bucket permite recuperar uma versão anterior do `.tfstate`.
 - Sempre rodar `terraform plan` antes de qualquer `apply`/`destroy` de
   correção, prestando atenção especial a qualquer `# forces replacement`
   no `aws_eks_cluster`.
@@ -227,6 +226,7 @@ parte desta validação (fora do escopo, ADR-0003 Seção 14).
   da presença ou não desse lifecycle, `terraform destroy`/
   `aws eks delete-cluster` nunca deve ser executado sem confirmação
   explícita em sessão.
-- **Backend S3:** ainda não migrado (mesmo estado de `01-` na época do
-  ADR-0003) — `override.tf` mantém o backend local até uma migração futura
-  e deliberada, fora do escopo desta entrega.
+- **Backend S3:** migrado em 2026-09-21 (`override.tf` removido,
+  `backend.hcl` criado). Como a stack agora tem `backend.hcl`, os drivers
+  `terraform-deploy`/`terraform-destroy` a ignoram por padrão — use
+  `--allow-remote-apply` para rodar o pipeline contra ela.
