@@ -1,0 +1,74 @@
+<mxfile host="app.diagrams.net" agent="aws-architect-agent" version="24.7.17" type="device">
+  <diagram name="Arquitetura" id="adr-0004-arquitetura">
+    <mxGraphModel dx="1422" dy="762" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1300" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="operator" value="Operador&#10;(docker build/push manual, sem CI — Premissa 6)" style="ellipse;whiteSpace=wrap;html=1;fillColor=#F2F2F2;strokeColor=#545B64;fontColor=#1A1A1A;" vertex="1" parent="1">
+          <mxGeometry x="40" y="200" width="200" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ecr_stack_group" value="03-ecr-stack-ai" style="rounded=1;whiteSpace=wrap;html=1;verticalAlign=top;fillColor=none;strokeColor=#8C4FFF;fontColor=#1A1A1A;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="340" y="80" width="420" height="420" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ecr_frontend" value="ECR Repository&#10;dvn-workshop/production/frontend&#10;AES256, IMMUTABLE_WITH_EXCLUSION(latest*)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF1E0;strokeColor=#ED7100;fontColor=#1A1A1A;" vertex="1" parent="1">
+          <mxGeometry x="370" y="130" width="360" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ecr_backend" value="ECR Repository&#10;dvn-workshop/production/backend&#10;AES256, IMMUTABLE_WITH_EXCLUSION(latest*)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF1E0;strokeColor=#ED7100;fontColor=#1A1A1A;" vertex="1" parent="1">
+          <mxGeometry x="370" y="260" width="360" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="lifecycle_frontend" value="Lifecycle Policy&#10;(expira não-tageadas &gt;7d,&#10;mantém últimas 10 tageadas)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF1E0;strokeColor=#ED7100;fontColor=#1A1A1A;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="370" y="390" width="170" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="lifecycle_backend" value="Lifecycle Policy&#10;(expira não-tageadas &gt;7d,&#10;mantém últimas 10 tageadas)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF1E0;strokeColor=#ED7100;fontColor=#1A1A1A;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="560" y="390" width="170" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="eks_stack_group" value="02-eks-stack-ai (existente — NÃO provisionado/alterado por este ADR)" style="rounded=1;whiteSpace=wrap;html=1;verticalAlign=top;fillColor=none;strokeColor=#ED7100;fontColor=#1A1A1A;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="860" y="140" width="360" height="280" as="geometry" />
+        </mxCell>
+
+        <mxCell id="node_role" value="IAM Role — Node Group&#10;prd-eks-node-role-us-east-1&#10;(AmazonEC2ContainerRegistryReadOnly, já anexada)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDE8EA;strokeColor=#DD344C;fontColor=#1A1A1A;" vertex="1" parent="1">
+          <mxGeometry x="890" y="190" width="300" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="node_group" value="EKS Managed Node Group&#10;prd-eks-ng-us-east-1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF1E0;strokeColor=#ED7100;fontColor=#1A1A1A;" vertex="1" parent="1">
+          <mxGeometry x="890" y="320" width="300" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="edge_operator_frontend" value="docker push (imagem frontend)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;fontColor=#1A1A1A;" edge="1" parent="1" source="operator" target="ecr_frontend">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="edge_operator_backend" value="docker push (imagem backend)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;fontColor=#1A1A1A;" edge="1" parent="1" source="operator" target="ecr_backend">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="edge_lifecycle_frontend" value="aplica regras de expiração" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;strokeColor=#545B64;fontColor=#1A1A1A;endArrow=none;startArrow=none;" edge="1" parent="1" source="lifecycle_frontend" target="ecr_frontend">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="edge_lifecycle_backend" value="aplica regras de expiração" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;strokeColor=#545B64;fontColor=#1A1A1A;endArrow=none;startArrow=none;" edge="1" parent="1" source="lifecycle_backend" target="ecr_backend">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="edge_role_nodegroup" value="permissão de pull (policy já existente)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#545B64;fontColor=#1A1A1A;" edge="1" parent="1" source="node_role" target="node_group">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="edge_nodegroup_frontend" value="docker pull (imagem frontend)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;fontColor=#1A1A1A;" edge="1" parent="1" source="node_group" target="ecr_frontend">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="edge_nodegroup_backend" value="docker pull (imagem backend)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;fontColor=#1A1A1A;" edge="1" parent="1" source="node_group" target="ecr_backend">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

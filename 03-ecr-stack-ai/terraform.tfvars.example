@@ -1,0 +1,39 @@
+# Exemplo de terraform.tfvars (ADR-0004, Secao 13.2).
+# Copie para terraform.tfvars, na raiz da stack, e ajuste os valores.
+# terraform.tfvars e gitignored (ver .gitignore: *.tfvars, exceto .example).
+#
+# Estrutura de variaveis agrupadas por dominio, conforme
+# .claude/rules/terraform-naming-conventions.md (Secao 4).
+#
+# Ambiente unico "prd" — nao ha "environment" como variavel de input
+# (fixo em locals.tf, mesmo padrao de 00-/01-/02-).
+
+aws_region   = "us-east-1"
+project_name = "ecr"
+
+# Nome dos repositorios = "{namespace}/{environment_segment}/{frontend|backend}"
+# -> "dvn-workshop/production/frontend" e "dvn-workshop/production/backend"
+# (ADR-0004 Secao 9 — pedido literal do solicitante; NAO alterar apos o
+# primeiro apply: mudar o nome forca recriacao do repositorio e orfana as
+# imagens ja publicadas — Secao 11/12).
+ecr = {
+  namespace                             = "dvn-workshop"
+  environment_segment                   = "production"
+  image_tag_mutability                  = "IMMUTABLE_WITH_EXCLUSION"
+  image_tag_mutability_exclusion_filter = "latest*"
+  scan_on_push                          = true
+  encryption_type                       = "AES256"
+}
+
+# Retencao (ADR-0004 D4): ajustavel sem recriar os repositorios.
+ecr_lifecycle = {
+  untagged_expire_days = 7
+  tagged_keep_count    = 10
+}
+
+# OBRIGATORIO: substituir os placeholders por valores reais antes do apply
+# (ADR-0004 Secao 9 / Premissa 10).
+tags = {
+  Owner      = "AJUSTAR-time-responsavel"
+  CostCenter = "AJUSTAR-centro-de-custo"
+}
