@@ -147,9 +147,14 @@ Ao final, entregue um bloco de **instruções operacionais** (ver seção **OUTP
 
 ## Kubernetes (quando aplicável)
 
+- **Manifestos de workload:** siga sempre `.claude/rules/kubernetes-manifests.md`. Pontos centrais dessa regra:
+  - Todo `Deployment` é entregue junto com um `Service` do tipo `NodePort` e um `PodDisruptionBudget` (mesmo `name`/`namespace`/`selector`) — gerar só o `Deployment` é entrega incompleta.
+  - Conjunto fixo de labels `app.kubernetes.io/*` + `environment` em todos os objetos; `selector` usa apenas `name` + `instance`.
+  - `replicas >= 2`, `readinessProbe` **e** `livenessProbe` em todo container apontando para o endpoint do `HEALTHCHECK` do Dockerfile.
+  - `image:` no ECR de `03-ecr-stack-ai` com tag explícita (nunca `latest`).
+  - `allowPrivilegeEscalation: false` em todo container, sem exceção; todo `volumeMounts[]` com `readOnly: true` (só `emptyDir` efêmero pode ser gravável).
 - Manifests versionados ou Helm charts com `values.yaml` por ambiente.
 - `resources.requests/limits` definidos em todos os containers.
-- `readinessProbe` e `livenessProbe` obrigatórios.
 - `NetworkPolicy` habilitada por namespace quando o cluster suportar.
 - Segredos via External Secrets Operator ou Secrets Manager CSI Driver — nunca em `Secret` manifest versionado em git.
 

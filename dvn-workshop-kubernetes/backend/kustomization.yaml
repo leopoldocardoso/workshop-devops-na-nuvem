@@ -1,0 +1,23 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - deployment.yaml
+  - service.yaml
+  - pod-disruption-budget.yaml
+
+# Fonte única da versão implantada: a tag da imagem e a label
+# app.kubernetes.io/version são definidas AQUI, nunca nos manifestos.
+# Para promover uma nova versão:
+#   kustomize edit set image backend=659942169599.dkr.ecr.us-east-1.amazonaws.com/dvn-workshop/production/backend:vX.Y
+# e atualize o valor de app.kubernetes.io/version abaixo no mesmo commit.
+images:
+  - name: backend
+    newName: 659942169599.dkr.ecr.us-east-1.amazonaws.com/dvn-workshop/production/backend
+    newTag: v1.0
+
+labels:
+  - pairs:
+      app.kubernetes.io/version: v1.0
+    includeSelectors: false   # nunca no selector (imutável) — só em metadata e no template do Pod
+    includeTemplates: true

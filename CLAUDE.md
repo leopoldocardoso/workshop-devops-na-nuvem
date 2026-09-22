@@ -67,6 +67,16 @@ This is the authoritative, binding naming/structure rule for all Terraform code 
 
 Read the full rule file before writing or reviewing any `.tf` — it also covers argument ordering (`count`/`for_each` first, `tags` before `depends_on`/`lifecycle`) and other details not repeated here.
 
+### Kubernetes manifest convention (`.claude/rules/kubernetes-manifests.md`)
+
+Binding rule for every Kubernetes manifest in the repo (`devops-engineer` generates against it; `aws-architect` references it when an ADR prescribes workload topology). Read it before writing or reviewing any YAML under `dvn-workshop-kubernetes/`. Non-negotiables, since they deviate from a generic "just a Deployment" approach:
+
+- **Every workload is an indivisible set**: `Deployment` + `Service` of type **`NodePort`** + `PodDisruptionBudget` (`minAvailable: 1`), same `name`/`namespace`/`selector`. A lone `Deployment` is an incomplete delivery. `NodePort` is deliberate: the cluster has no AWS Load Balancer Controller/Ingress (ADR-0003 §14), so a `LoadBalancer` Service would sit `<pending>` forever.
+- `replicas >= 2`, `RollingUpdate` with `maxUnavailable: 0`, `topologySpreadConstraints` across nodes; `readinessProbe` **and** `livenessProbe` on every container, pointing at the same endpoint as the Dockerfile `HEALTHCHECK` (frontend `/api/health:3000`, backend `/backend/health:8080`).
+- Fixed label set (`app.kubernetes.io/{name,instance,version,component,part-of,managed-by}` + `environment`) on every object; `selector.matchLabels` uses only `name` + `instance`, never `version`.
+- Security: `allowPrivilegeEscalation: false` with no exception, `readOnlyRootFilesystem: true`, `drop: ["ALL"]`, `runAsNonRoot` **with a numeric `runAsUser`** (kubelet can't verify a by-name `USER` from the image — `1000` for the Node image, `1654` for the .NET image), `automountServiceAccountToken: false`. Every `volumeMounts[]` is `readOnly: true`; the only writable mount allowed is an `emptyDir` with `sizeLimit` and a justifying comment (today: `/app/.next/cache` for the frontend, `/tmp` for the backend). `hostPath` is forbidden.
+- **Images are managed by each app's `kustomization.yaml`, not by `deployment.yaml`**: the Deployment says `image: frontend` (logical name) and the kustomization's `images` transformer sets `newName` (an `03-ecr-stack-ai` repo) + `newTag` (explicit, never `latest`), while its `labels` transformer (`includeSelectors: false`, `includeTemplates: true`) injects `app.kubernetes.io/version` with the same value — so a version bump is a one-file diff per app (`kustomize edit set image` + the label), and the tag must already exist in ECR before an `apply`.
+
 ### Two-agent workflow: `aws-architect` → `devops-engineer`
 
 Infra changes in this repo are meant to flow through two specialized subagents (`.claude/agents/*.md`), with a strict separation of concerns:
@@ -97,5 +107,11 @@ Four stacks exist today, each with its own ADR and its own `README.md` — the R
 ### Application images (`dvn-workshop-apps/`)
 
 `dvn-workshop-apps/backend/YoutubeLiveApp/` (.NET) and `dvn-workshop-apps/frontend/youtube-live-app/` (Next.js) each carry a production `Dockerfile` (multi-stage, non-root, `HEALTHCHECK`, built for `linux/amd64`). Two skills operate on them: `dockerfile-builder` (generate/review a Dockerfile, build and smoke-test it locally) and `docker-ecr-push` (build + push given only the target ECR image URI; the local folder is resolved from the last path segment of the repository name — `.../frontend` → `dvn-workshop-apps/frontend/*/Dockerfile`). `docker-ecr-push` never creates ECR repositories — that is `03-ecr-stack-ai`'s job. Push with an explicit version tag (e.g. `:v1.0`); a bare URI defaults to `latest`, which is mutable by the exclusion filter and not what a Kubernetes rollout should pin to.
+
+### Kubernetes manifests (`dvn-workshop-kubernetes/`)
+
+Kustomize tree (root `kustomization.yaml` → `namespace.yaml` + `frontend/` + `backend/`, one file per object) deploying the two app images into the `dvn-workshop` namespace of the `02-eks-stack-ai` cluster, generated per the rule above. The apps read no environment variables and don't call each other, so there are no `ConfigMap`s. Validate with `kustomize build dvn-workshop-kubernetes/` (offline) and `| kubectl apply --dry-run=server -f -` (needs cluster access); apply with `kubectl apply -k dvn-workshop-kubernetes/` — a real apply follows the same explicit in-session authorization rule as `terraform apply`. The `README.md` there is the source of truth for rollout/rollback commands.
+
+**Gotcha:** even `kubectl apply --dry-run=client` does API discovery against the current kubeconfig context. Because the EKS cluster has been destroyed and recreated, the local kubeconfig often points at a stale endpoint and fails with `dial tcp: lookup ...eks.amazonaws.com: no such host` — that is not a manifest error; run `aws eks update-kubeconfig --region us-east-1 --name <cluster>` first. NodePorts are reachable only inside the VPC (nodes sit in `01-`'s private subnets); public exposure is an ADR decision, not a manifest change.
 
 **Gotcha:** the versioned `terraform.tfvars.example`/`backend.hcl.example` files in `00-`/`01-`/`02-` still show `sa-east-1` as the example region — a holdover from before the 2026-08-30 migration of all three stacks to `us-east-1` (see commit `7ef06f6`). Don't copy an example file verbatim; set `aws_region`/`region` to `us-east-1` unless a task explicitly targets a different region. Real `terraform.tfvars`/`backend.hcl` files are gitignored, generated from these examples, and (per each stack's README) ship with placeholder `Owner`/`CostCenter` tag values that must be replaced with real values before a real `apply`.

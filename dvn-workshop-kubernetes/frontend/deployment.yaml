@@ -1,0 +1,104 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: dvn-workshop
+  labels:
+    app.kubernetes.io/name: frontend
+    app.kubernetes.io/instance: frontend-prd
+    app.kubernetes.io/component: web
+    app.kubernetes.io/part-of: dvn-workshop
+    app.kubernetes.io/managed-by: kustomize
+    environment: prd
+spec:
+  replicas: 2
+  revisionHistoryLimit: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: frontend
+      app.kubernetes.io/instance: frontend-prd
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: frontend
+        app.kubernetes.io/instance: frontend-prd
+        app.kubernetes.io/component: web
+        app.kubernetes.io/part-of: dvn-workshop
+        app.kubernetes.io/managed-by: kustomize
+        environment: prd
+    spec:
+      automountServiceAccountToken: false
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: frontend
+              app.kubernetes.io/instance: frontend-prd
+      securityContext:
+        runAsNonRoot: true
+        # A imagem usa `USER node` (nome, não UID); o kubelet só consegue verificar
+        # runAsNonRoot com UID numérico, então fixamos o UID do usuário `node` da imagem.
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: frontend
+          image: frontend
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: PORT
+              value: "3000"
+            - name: HOSTNAME
+              value: "0.0.0.0"
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            # Exceção da rule (seção 7): o servidor standalone do Next.js grava cache
+            # (image optimizer / ISR) em .next/cache; com readOnlyRootFilesystem
+            # precisa de um emptyDir gravável só nesse caminho.
+            - name: next-cache
+              mountPath: /app/.next/cache
+      volumes:
+        - name: next-cache
+          emptyDir:
+            sizeLimit: 64Mi
