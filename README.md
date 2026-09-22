@@ -1,5 +1,7 @@
 # Workshop DevOps na Nuvem 🚀
 
+> 📚 Este conteúdo faz parte do **Workshop DevOps na Nuvem** ministrado por **Kenerry Serain**
+
 Repositório de **Infraestrutura como Código (IaC)** para um ambiente de produção completo na AWS, com EKS (Kubernetes), networking, ECR, e aplicações containerizadas.
 
 ## 📋 O que é este projeto?
