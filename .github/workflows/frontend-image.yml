@@ -1,0 +1,444 @@
+---
+# ---------------------------------------------------------------------------
+# frontend-image.yml
+#
+# ADR-0007 (Revisao 2) — build e push da imagem do frontend para o ECR.
+# ADR-0008 (Revisao 1) — job `update-manifest`: write-back da tag em
+#                        dvn-workshop-kubernetes/frontend/kustomization.yaml.
+#
+# Contratos nao negociaveis:
+#   * Gatilho APENAS `push` em `main` (+ workflow_dispatch). NENHUM
+#     `pull_request`/`pull_request_target` — e a 1a das 3 camadas de defesa
+#     descritas no ADR-0007 Secao 8, agora que o repositorio e PUBLICO.
+#   * Nenhum secret de credencial AWS: autenticacao 100% via OIDC, assumindo
+#     a role do ADR-0005 informada em `vars.AWS_ROLE_ARN`.
+#   * Toda action de terceiro pinada por SHA de commit.
+#   * `contents: write` existe SOMENTE no job de write-back.
+#   * ECR primeiro, Git depois (`needs: build`) — commitar uma tag que ainda
+#     nao existe deixa o rollout preso em ImagePullBackOff silencioso
+#     (`maxUnavailable: 0`).
+# ---------------------------------------------------------------------------
+
+name: frontend-image
+
+on:
+  push:
+    branches: [main]
+    # `paths` e `paths-ignore` sao mutuamente exclusivos para o mesmo evento
+    # ("You cannot use both the paths and paths-ignore filters for the same
+    # event in a workflow" — GitHub Docs). O ADR-0008 passo 2 pede
+    # `paths-ignore: dvn-workshop-kubernetes/**` como defesa em profundidade
+    # contra loop de CI; aqui isso e expresso pelo padrao negado abaixo, que e
+    # a forma valida — e, na pratica, a allow-list ja exclui aquele diretorio
+    # por construcao (um commit de write-back nao casa com nenhum padrao
+    # positivo, logo nao dispara este workflow).
+    paths:
+      - 'dvn-workshop-apps/frontend/**'
+      - '.github/workflows/frontend-image.yml'
+      - '!dvn-workshop-kubernetes/**'
+  workflow_dispatch:
+
+# ADR-0007 Secao 5.3: permissoes minimas no nivel do workflow. O job de
+# write-back sobrescreve com `contents: write` apenas para si.
+permissions:
+  contents: read
+  id-token: write
+
+# ADR-0007 Secao 5.2: um grupo por app. `cancel-in-progress: false` — cancelar
+# um build no meio deixaria uma tag prometida e nao publicada.
+concurrency:
+  group: image-frontend-main
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: dvn-workshop/production/frontend
+  APP_NAME: frontend
+  APP_CONTEXT: dvn-workshop-apps/frontend/youtube-live-app
+  IMAGE_PLATFORM: linux/amd64
+  KUSTOMIZATION_PATH: dvn-workshop-kubernetes/frontend/kustomization.yaml
+  KUSTOMIZE_ROOT: dvn-workshop-kubernetes
+  EXPECTED_IMAGE_NAME: frontend
+
+jobs:
+  build:
+    name: Build e push da imagem (ECR)
+    runs-on: ubuntu-latest
+
+    outputs:
+      image_tag: ${{ steps.meta.outputs.image_tag }}
+      image_uri: ${{ steps.meta.outputs.image_uri }}
+
+    steps:
+      - name: Checkout do codigo
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6.1.0
+        with:
+          fetch-depth: 1
+
+      - name: Autenticar na AWS via OIDC (role do ADR-0005)
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a  # v4.3.1
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login no ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd  # v2.1.7
+
+      # ADR-0007 D1/Opcao A: tag derivada do commit, unica, imutavel e
+      # deterministica (um re-run gera a mesma tag). Nunca `latest`.
+      - name: Calcular tag e URI da imagem
+        id: meta
+        env:
+          ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          set -euo pipefail
+          image_tag="sha-${GITHUB_SHA::7}"
+          image_uri="${ECR_REGISTRY}/${ECR_REPOSITORY}:${image_tag}"
+          echo "image_tag=${image_tag}" >> "$GITHUB_OUTPUT"
+          echo "image_uri=${image_uri}" >> "$GITHUB_OUTPUT"
+          echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          echo "Tag alvo: ${image_tag}"
+
+      # ADR-0007 Premissa 7: a tag e imutavel no ECR
+      # (IMMUTABLE_WITH_EXCLUSION, ADR-0004). Um re-run republicaria a mesma
+      # tag e receberia ImageTagAlreadyExistsException — por isso o push e
+      # PULADO quando a tag ja existe, e o job segue verde (idempotencia).
+      - name: Verificar se a tag ja existe no ECR (idempotencia)
+        id: exists
+        run: |
+          set -euo pipefail
+          if aws ecr describe-images \
+              --repository-name "${ECR_REPOSITORY}" \
+              --image-ids "imageTag=${{ steps.meta.outputs.image_tag }}" \
+              --region "${AWS_REGION}" >/dev/null 2>&1; then
+            echo "already_published=true" >> "$GITHUB_OUTPUT"
+            echo "Tag ${{ steps.meta.outputs.image_tag }} ja publicada — build/push serao pulados."
+          else
+            echo "already_published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Configurar Buildx
+        if: steps.exists.outputs.already_published == 'false'
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3.12.0
+
+      # ADR-0007 D3/Opcao A: cache `type=gha` (NUNCA `type=registry`, que
+      # gravaria uma tag `buildcache` mutavel, incompativel com a
+      # imutabilidade do ADR-0004). `provenance: false`/`sbom: false` evitam
+      # artefatos/tags extras no repositorio ECR.
+      - name: Build e push da imagem
+        if: steps.exists.outputs.already_published == 'false'
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8  # v6.19.2
+        with:
+          context: ${{ env.APP_CONTEXT }}
+          file: ${{ env.APP_CONTEXT }}/Dockerfile
+          platforms: ${{ env.IMAGE_PLATFORM }}
+          push: true
+          provenance: false
+          sbom: false
+          tags: ${{ steps.meta.outputs.image_uri }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.created=${{ steps.meta.outputs.created }}
+
+      # Contrato de ordem com o ADR-0008: nada e promovido no Git sem que a
+      # imagem exista de fato no ECR.
+      - name: Verificar a imagem publicada no ECR
+        run: |
+          set -euo pipefail
+          aws ecr describe-images \
+            --repository-name "${ECR_REPOSITORY}" \
+            --image-ids "imageTag=${{ steps.meta.outputs.image_tag }}" \
+            --region "${AWS_REGION}" \
+            --query 'imageDetails[0].{pushedAt:imagePushedAt,digest:imageDigest,sizeBytes:imageSizeInBytes}' \
+            --output table
+
+      - name: Resumo da execucao
+        run: |
+          {
+            echo "### Imagem publicada — ${APP_NAME}"
+            echo ""
+            echo "| Campo | Valor |"
+            echo "|---|---|"
+            echo "| Tag | \`${{ steps.meta.outputs.image_tag }}\` |"
+            echo "| URI | \`${{ steps.meta.outputs.image_uri }}\` |"
+            echo "| Commit | \`${GITHUB_SHA}\` |"
+            echo "| Push pulado (idempotencia) | ${{ steps.exists.outputs.already_published }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # -------------------------------------------------------------------------
+  # ADR-0008 — write-back da tag no kustomization.yaml.
+  # -------------------------------------------------------------------------
+  update-manifest:
+    name: Write-back da tag no kustomization.yaml
+    needs: build
+    runs-on: ubuntu-latest
+
+    # ADR-0008 D2/Opcao A e Secao 8: `contents: write` confinado a ESTE job.
+    # `id-token: write` e necessario para reassumir a role do ADR-0005 e
+    # conferir a tag no ECR (`ecr:DescribeImages`).
+    permissions:
+      contents: write
+      id-token: write
+
+    # ADR-0008 D4/Opcao A: grupo COMPARTILHADO entre frontend e backend —
+    # serializa as escritas em `main` e evita perder uma promocao.
+    concurrency:
+      group: kustomize-write-back-main
+      cancel-in-progress: false
+
+    env:
+      IMAGE_TAG: ${{ needs.build.outputs.image_tag }}
+      IMAGE_URI: ${{ needs.build.outputs.image_uri }}
+      GIT_AUTHOR_NAME: 'github-actions[bot]'
+      GIT_AUTHOR_EMAIL: '41898282+github-actions[bot]@users.noreply.github.com'
+
+    steps:
+      - name: Checkout de main (token persistido para push)
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6.1.0
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: true
+
+      # ADR-0008 Premissa 5: nao presumir a presenca das ferramentas.
+      # O runner ubuntu-24.04 traz yq, kustomize e AWS CLI v2 — este step
+      # falha cedo e com mensagem clara caso isso mude.
+      - name: Conferir ferramentas do runner (yq, kustomize, aws)
+        run: |
+          set -euo pipefail
+          missing=0
+          for tool in yq kustomize aws git; do
+            if command -v "$tool" >/dev/null 2>&1; then
+              echo "OK: $tool -> $(command -v "$tool")"
+            else
+              echo "FALTANDO: $tool"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "::error::Ferramenta obrigatoria ausente no runner (ADR-0008 Premissa 5)."
+            exit 1
+          fi
+          yq --version
+          kustomize version
+
+      - name: Autenticar na AWS via OIDC (role do ADR-0005)
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a  # v4.3.1
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login no ECR (obter o registry, sem hardcode de account ID)
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd  # v2.1.7
+
+      # ADR-0008 Secao 5, passo 4: contrato de ordem "ECR primeiro, Git
+      # depois". Sem isto, o ArgoCD sincroniza uma tag inexistente e o
+      # rollout trava em ImagePullBackOff de forma silenciosa.
+      - name: Confirmar que a tag existe no ECR
+        run: |
+          set -euo pipefail
+          if ! aws ecr describe-images \
+              --repository-name "${ECR_REPOSITORY}" \
+              --image-ids "imageTag=${IMAGE_TAG}" \
+              --region "${AWS_REGION}" >/dev/null 2>&1; then
+            echo "::error::Tag ${IMAGE_TAG} NAO existe em ${ECR_REPOSITORY}. Nada sera commitado."
+            exit 1
+          fi
+          echo "Tag ${IMAGE_TAG} confirmada no ECR."
+
+      # ADR-0008 D1/Opcao A (salvaguarda): falhar em vez de editar cegamente
+      # o indice 0 se a estrutura do arquivo nao for a esperada.
+      - name: Validar a estrutura do kustomization.yaml
+        env:
+          ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          set -euo pipefail
+          expected_new_name="${ECR_REGISTRY}/${ECR_REPOSITORY}"
+
+          images_count="$(yq '.images | length' "${KUSTOMIZATION_PATH}")"
+          if [ "${images_count}" != "1" ]; then
+            echo "::error::${KUSTOMIZATION_PATH} tem ${images_count} entradas em .images; esperado exatamente 1."
+            exit 1
+          fi
+
+          image_name="$(yq '.images[0].name' "${KUSTOMIZATION_PATH}")"
+          if [ "${image_name}" != "${EXPECTED_IMAGE_NAME}" ]; then
+            echo "::error::.images[0].name = '${image_name}'; esperado '${EXPECTED_IMAGE_NAME}'."
+            exit 1
+          fi
+
+          new_name="$(yq '.images[0].newName' "${KUSTOMIZATION_PATH}")"
+          if [ "${new_name}" != "${expected_new_name}" ]; then
+            echo "::error::.images[0].newName = '${new_name}'; esperado '${expected_new_name}'."
+            exit 1
+          fi
+
+          labels_count="$(yq '.labels | length' "${KUSTOMIZATION_PATH}")"
+          if [ "${labels_count}" != "1" ]; then
+            echo "::error::${KUSTOMIZATION_PATH} tem ${labels_count} entradas em .labels; esperado exatamente 1."
+            exit 1
+          fi
+
+          version_label="$(yq '.labels[0].pairs."app.kubernetes.io/version"' "${KUSTOMIZATION_PATH}")"
+          if [ "${version_label}" = "null" ]; then
+            echo "::error::.labels[0].pairs.\"app.kubernetes.io/version\" ausente."
+            exit 1
+          fi
+          echo "Estrutura validada. Versao atual: ${version_label}"
+
+      # ADR-0008 Secao 5, passo 6 e regra .claude/rules/kubernetes-manifests.md
+      # Secao 2/8: os DOIS campos mudam juntos, com o mesmo valor.
+      - name: Atualizar newTag e app.kubernetes.io/version
+        run: |
+          set -euo pipefail
+          # A tag e promovida com `kustomize edit set image` — a ferramenta
+          # prescrita pela regra .claude/rules/kubernetes-manifests.md Secao 8.
+          # Edicao estrutural pela ferramenta oficial, nunca substituicao de
+          # texto.
+          #
+          # NOTA DE FORMATACAO: `kustomize edit` reserializa o arquivo inteiro
+          # (re-indenta listas, reordena chaves e OMITE zero values — entre
+          # eles `includeSelectors: false`, que e o default do transformer
+          # `labels`). Verificado: sem essa chave, `kustomize build` mantem o
+          # selector com apenas name+instance, SEM a label de versao — a
+          # propriedade de seguranca da Secao 2 da regra e preservada.
+          # Os kustomization.yaml deste repo ja estao gravados no formato
+          # canonico do kustomize, entao o diff de uma promocao fica restrito
+          # as duas linhas de valor (criterio da Secao 13.3 do ADR-0008).
+          #
+          # `newName` e lido do proprio arquivo para que a promocao altere
+          # SOMENTE a tag, jamais o registry/repositorio.
+          new_name="$(yq '.images[0].newName' "${KUSTOMIZATION_PATH}")"
+          ( cd "$(dirname "${KUSTOMIZATION_PATH}")" \
+              && kustomize edit set image "${EXPECTED_IMAGE_NAME}=${new_name}:${IMAGE_TAG}" )
+
+          # A label app.kubernetes.io/version NAO e coberta por nenhum
+          # subcomando de `kustomize edit` (que so escreve em `.images`).
+          # `yq -i` foi descartado aqui: ele reserializa o documento num estilo
+          # de indentacao DIFERENTE do kustomize (lista recuada + remocao de
+          # linhas em branco), e os dois passam a brigar pela formatacao —
+          # medido: 21 linhas de diff por promocao. A label e portanto
+          # atualizada por substituicao ancorada de UMA linha, o que mantem o
+          # arquivo no formato canonico que o `kustomize edit` acabou de
+          # gravar. A validacao estrutural anterior garante que existe
+          # exatamente uma entrada em `.labels`, logo o padrao casa com uma
+          # unica linha. Diff medido da promocao completa: 2 linhas de valor.
+          sed -i -E "s|^([[:space:]]*app\.kubernetes\.io/version:[[:space:]]*).*$|\1${IMAGE_TAG}|" \
+            "${KUSTOMIZATION_PATH}"
+
+          # Read-back: os DOIS campos devem ter exatamente o mesmo valor
+          # (regra .claude/rules/kubernetes-manifests.md Secao 2/8).
+          got_tag="$(yq '.images[0].newTag' "${KUSTOMIZATION_PATH}")"
+          got_version="$(yq '.labels[0].pairs."app.kubernetes.io/version"' "${KUSTOMIZATION_PATH}")"
+          if [ "${got_tag}" != "${IMAGE_TAG}" ] || [ "${got_version}" != "${IMAGE_TAG}" ]; then
+            echo "::error::Edicao inconsistente: newTag='${got_tag}', version='${got_version}', esperado '${IMAGE_TAG}'."
+            exit 1
+          fi
+          git --no-pager diff -- "${KUSTOMIZATION_PATH}"
+
+      # Idempotencia (ADR-0008 Secao 5, passo 7 e criterio 13.3): re-run de
+      # uma promocao ja aplicada termina verde, sem commit vazio.
+      - name: Detectar se ha mudanca a promover
+        id: changed
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- "${KUSTOMIZATION_PATH}"; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Arquivo ja aponta para ${IMAGE_TAG}; nada a commitar."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ADR-0008 D3/Opcao A: este e o guard-rail que substitui a revisao de
+      # PR (a branch `main` nao tem branch protection). Se o Kustomize nao
+      # renderizar, NADA e commitado.
+      - name: Validar o Kustomize renderizado (guard-rail pre-commit)
+        if: steps.changed.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          rendered="${RUNNER_TEMP}/rendered.yaml"
+          kustomize build "${KUSTOMIZE_ROOT}" > "${rendered}"
+
+          rendered_image="$(yq eval-all \
+            "select(.kind == \"Deployment\" and .metadata.name == \"${APP_NAME}\") | .spec.template.spec.containers[0].image" \
+            "${rendered}")"
+          if [ "${rendered_image}" != "${IMAGE_URI}" ]; then
+            echo "::error::Imagem renderizada '${rendered_image}' difere da esperada '${IMAGE_URI}'."
+            exit 1
+          fi
+
+          rendered_version="$(yq eval-all \
+            "select(.kind == \"Deployment\" and .metadata.name == \"${APP_NAME}\") | .metadata.labels.\"app.kubernetes.io/version\"" \
+            "${rendered}")"
+          if [ "${rendered_version}" != "${IMAGE_TAG}" ]; then
+            echo "::error::Label app.kubernetes.io/version renderizada '${rendered_version}' difere da tag '${IMAGE_TAG}'."
+            exit 1
+          fi
+          echo "kustomize build OK — imagem e label de versao consistentes."
+
+      # ADR-0008 Secao 8: barreira contra um script defeituoso (ou
+      # malicioso) reescrever manifests, .tf ou workflows com a permissao
+      # de escrita concedida a este job.
+      - name: Verificar que o diff toca apenas o arquivo alvo
+        if: steps.changed.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          changed_files="$(git diff --name-only)"
+          if [ "${changed_files}" != "${KUSTOMIZATION_PATH}" ]; then
+            echo "::error::Diff fora do escopo. Arquivos alterados:"
+            echo "${changed_files}"
+            exit 1
+          fi
+
+          added="$(git diff -U0 -- "${KUSTOMIZATION_PATH}" | grep -c '^+[^+]' || true)"
+          removed="$(git diff -U0 -- "${KUSTOMIZATION_PATH}" | grep -c '^-[^-]' || true)"
+          if [ "${added}" != "2" ] || [ "${removed}" != "2" ]; then
+            echo "::error::Esperado um diff de exatamente 2 linhas alteradas; obtido +${added}/-${removed}."
+            exit 1
+          fi
+          echo "Diff restrito a ${KUSTOMIZATION_PATH} (+${added}/-${removed})."
+
+      # ADR-0008 D2/Opcao A + D4/Opcao A: commit como github-actions[bot],
+      # push direto em `main` com rebase e retry (absorve uma promocao
+      # concorrente da outra app). `[skip ci]` e defesa em profundidade — o
+      # mecanismo primario e o proprio GITHUB_TOKEN, cujos eventos nao
+      # disparam novas execucoes de workflow.
+      - name: Commit e push da promocao
+        if: steps.changed.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          git config user.name "${GIT_AUTHOR_NAME}"
+          git config user.email "${GIT_AUTHOR_EMAIL}"
+          git add -- "${KUSTOMIZATION_PATH}"
+          git commit -m "chore(${APP_NAME}): promove imagem para ${IMAGE_TAG} [skip ci]"
+
+          for attempt in 1 2 3; do
+            if git pull --rebase origin main && git push origin HEAD:main; then
+              echo "Promocao publicada em main (tentativa ${attempt})."
+              exit 0
+            fi
+            echo "Tentativa ${attempt} falhou (provavel concorrencia); repetindo em 5s..."
+            sleep 5
+          done
+          echo "::error::Nao foi possivel publicar a promocao em main apos 3 tentativas."
+          exit 1
+
+      - name: Resumo da promocao
+        run: |
+          {
+            echo "### Promocao — ${APP_NAME}"
+            echo ""
+            echo "| Campo | Valor |"
+            echo "|---|---|"
+            echo "| Tag | \`${IMAGE_TAG}\` |"
+            echo "| Imagem | \`${IMAGE_URI}\` |"
+            echo "| Arquivo | \`${KUSTOMIZATION_PATH}\` |"
+            echo "| Commit de promocao | ${{ steps.changed.outputs.changed == 'true' && 'criado' || 'nao necessario (idempotente)' }} |"
+            echo ""
+            echo "O ArgoCD (ADR-0006) detecta a mudanca por polling em ate ~3 min."
+          } >> "$GITHUB_STEP_SUMMARY"

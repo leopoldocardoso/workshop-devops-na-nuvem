@@ -1,0 +1,6 @@
+# Registros de deploy gerados pelo driver terraform-deploy.
+# Contem `terraform output -json`, `terraform state list` e a identidade AWS
+# que aplicou. Desversionado enquanto o repositorio estiver publico durante o
+# laboratorio (ADR-0006 Rev. 3, Secao 11). Os arquivos continuam sendo gerados
+# localmente em docs/deployments/.
+docs/deployments/

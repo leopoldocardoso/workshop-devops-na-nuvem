@@ -1,0 +1,63 @@
+# Exemplo de terraform.tfvars (ADR-0006, Secao 13.2).
+# Copie para terraform.tfvars, na raiz da stack, e ajuste os valores.
+# terraform.tfvars e gitignored (ver .gitignore: *.tfvars, exceto .example).
+#
+# Estrutura de variaveis agrupadas por dominio, conforme
+# .claude/rules/terraform-naming-conventions.md (Secao 4).
+#
+# Ambiente unico "prd" — nao ha "environment" como variavel de input
+# (fixo em locals.tf, mesmo padrao de 00-/01-/02-/03-).
+#
+# NENHUM valor aqui e credencial: esta stack nao possui segredo algum
+# (ADR-0006 D6/Opcao D).
+
+aws_region   = "us-east-1"
+project_name = "argocd"
+
+# Cluster criado por 02-eks-stack-ai (ADR-0003). Somente leitura.
+eks = {
+  cluster_name = "prd-eks-us-east-1"
+}
+
+# Release do ArgoCD (ADR-0006 D1/A, D3/A, D4/A, Premissas 4 e 13).
+# chart_version FIXADA — reconfirmada no Artifact Hub / repositorio
+# argo-helm antes de qualquer bump.
+argocd = {
+  namespace              = "argocd"
+  chart_version          = "10.9.2"
+  server_service_type    = "ClusterIP"
+  ha_enabled             = false
+  dex_enabled            = false
+  notifications_enabled  = false
+  applicationset_enabled = false
+}
+
+# Application GitOps (ADR-0006 Secao 5 / D5/A / D6/D).
+#
+# ROLLOUT EM TRES ETAPAS (Secao 13.1 passos 3 e 6):
+#   1) enabled = false                                  -> instala so o ArgoCD
+#   2) enabled = true, automated_* = false              -> cria a Application e
+#                                                          permite inspecionar
+#                                                          o diff na UI
+#   3) enabled = true, automated_* = true               -> estado final
+#
+# repo_url: HTTPS PUBLICO, SEM credencial. Depende de o repositorio estar
+# publico (Premissa 2) — se ele for fechado, a Application vai a
+# ComparisonError (ver README.md).
+argocd_application = {
+  enabled               = true
+  name                  = "dvn-workshop"
+  repo_url              = "https://github.com/leopoldocardoso/workshop-devops-na-nuvem.git"
+  path                  = "dvn-workshop-kubernetes"
+  target_revision       = "main"
+  destination_namespace = "dvn-workshop"
+  automated_prune       = true
+  automated_self_heal   = true
+}
+
+# OBRIGATORIO: substituir os placeholders por valores reais antes do apply
+# (ADR-0006 Premissa 15).
+tags = {
+  Owner      = "Leopoldo Peixoto Cardoso"
+  CostCenter = "workshop-devops-na-nuvem"
+}

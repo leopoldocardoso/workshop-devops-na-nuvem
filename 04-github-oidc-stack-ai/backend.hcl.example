@@ -1,0 +1,15 @@
+# Exemplo de arquivo de configuracao parcial do backend S3 (ADR-0005,
+# backend.tf / Secao 13.1 passo 1). Copie para backend.hcl (gitignored) e
+# confirme os valores antes de rodar
+# `terraform init -backend-config=backend.hcl`.
+#
+# O driver .claude/skills/terraform-deploy/deploy.sh injeta
+# `-backend-config=backend.hcl` automaticamente quando invocado com
+# `--allow-remote-apply` para esta stack.
+#
+# Pre-requisito: o bucket abaixo deve existir previamente
+# (00-bootstrap-stack-ai, ADR-0002), com versioning e SSE habilitados.
+
+bucket = "prd-bootstrap-tfstate-659942169599-us-east-1"
+key    = "04-github-oidc-stack-ai/prd/terraform.tfstate"
+region = "us-east-1"

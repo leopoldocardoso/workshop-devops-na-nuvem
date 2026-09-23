@@ -1,0 +1,45 @@
+# Exemplo de terraform.tfvars (ADR-0005, Secao 13.2).
+# Copie para terraform.tfvars, na raiz da stack, e confira os valores.
+# terraform.tfvars e gitignored (ver .gitignore: *.tfvars, exceto .example).
+#
+# Estrutura de variaveis agrupadas por dominio, conforme
+# .claude/rules/terraform-naming-conventions.md (Secao 4). Nenhuma variavel
+# tem `default` — todos os valores abaixo sao obrigatorios.
+#
+# Ambiente unico "prd" — nao ha "environment" como variavel de input
+# (fixo em locals.tf, mesmo padrao de 00-/01-/02-/03-/05-).
+
+aws_region   = "us-east-1"
+project_name = "github-oidc"
+
+# Federacao OIDC GitHub Actions <-> AWS (ADR-0005 D1/A e D2/A).
+#
+# ATENCAO (ADR-0005 Secao 8, nota da Revisao 1): `allowed_branch` compoe a
+# condicao `sub` da trust policy e, com o repositorio PUBLICO durante o
+# laboratorio, e o CONTROLE DE FRONTEIRA entre uma contribuicao externa
+# (fork/PR de qualquer pessoa) e o registry de prd. Trocar "main" por algo
+# mais largo NAO e ajuste de conveniencia: e mudanca de seguranca e exige
+# revisao propria do ADR-0005. As validacoes de variables.tf rejeitam '*'
+# em owner, repositorio e branch.
+github_oidc = {
+  url              = "https://token.actions.githubusercontent.com"
+  audience         = "sts.amazonaws.com"
+  repository_owner = "leopoldocardoso"
+  repository_name  = "workshop-devops-na-nuvem"
+  allowed_branch   = "main"
+}
+
+# Repositorios ECR EXISTENTES (criados por 03-ecr-stack-ai / ADR-0004),
+# lidos por data source e usados para escopar a policy por ARN. Esta stack
+# nao cria nem altera repositorios.
+ecr = {
+  frontend_repository_name = "dvn-workshop/production/frontend"
+  backend_repository_name  = "dvn-workshop/production/backend"
+}
+
+# Tags ADICIONAIS. As obrigatorias (Environment, Owner, CostCenter, Project,
+# ManagedBy, DataClassification, StackName) ja estao em locals.tf com os
+# valores definitivos do ADR-0005 (Premissa 10) — diferente de 03-/05-, aqui
+# NAO ha placeholder "AJUSTAR-" a substituir. Mantenha o mapa vazio se nao
+# precisar de tags extras.
+tags = {}
