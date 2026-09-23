@@ -1,0 +1,129 @@
+<mxfile host="app.diagrams.net" agent="aws-architect-agent" version="24.7.17" type="device">
+  <diagram name="Arquitetura" id="adr-0006-arquitetura">
+    <mxGraphModel dx="1422" dy="762" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="title" value="ADR-0006 (Rev. 3) — ArgoCD (05-argocd-stack-ai) no cluster prd-eks-us-east-1 — repositório Git PÚBLICO (clone anônimo HTTPS, sem credencial) — us-east-1" style="text;html=1;align=left;verticalAlign=middle;fontSize=13;fontStyle=1;fontColor=#1A1A1A;" vertex="1" parent="1">
+          <mxGeometry x="40" y="15" width="1060" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="git" value="GitHub (repositório PÚBLICO durante o lab)" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;align=left;spacingLeft=8;fillColor=#F2F2F2;strokeColor=#545B64;fontColor=#1A1A1A;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="30" y="60" width="260" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="repo" value="Repo workshop-devops-na-nuvem&#10;dvn-workshop-kubernetes/ (Kustomize)&#10;sem credencial de leitura" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F2F2F2;strokeColor=#545B64;fontColor=#1A1A1A;" vertex="1" parent="1">
+          <mxGeometry x="45" y="95" width="230" height="75" as="geometry" />
+        </mxCell>
+
+        <mxCell id="tf" value="Terraform&#10;05-argocd-stack-ai&#10;(helm_release único)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F2F2F2;strokeColor=#545B64;fontColor=#1A1A1A;" vertex="1" parent="1">
+          <mxGeometry x="40" y="300" width="230" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="op" value="Operador (fora da VPC)&#10;kubectl port-forward 8080:443" style="ellipse;whiteSpace=wrap;html=1;fillColor=#F2F2F2;strokeColor=#545B64;fontColor=#1A1A1A;" vertex="1" parent="1">
+          <mxGeometry x="30" y="450" width="250" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="vpc" value="VPC 10.0.0.0/24 (01-networking-stack-ai)" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;align=left;spacingLeft=8;fillColor=#F2E8FF;strokeColor=#8C4FFF;fontColor=#1A1A1A;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="330" y="60" width="620" height="700" as="geometry" />
+        </mxCell>
+
+        <mxCell id="nat" value="NAT Gateway&#10;(saída dos nós privados)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F2E8FF;strokeColor=#8C4FFF;fontColor=#1A1A1A;" vertex="1" parent="1">
+          <mxGeometry x="350" y="90" width="180" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="eks" value="EKS prd-eks-us-east-1 (02-eks-stack-ai) — node group 2x t3.medium em subnets privadas" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;align=left;spacingLeft=8;fillColor=#FFF1E0;strokeColor=#ED7100;fontColor=#1A1A1A;" vertex="1" parent="1">
+          <mxGeometry x="350" y="180" width="580" height="560" as="geometry" />
+        </mxCell>
+
+        <mxCell id="api" value="Endpoint da API do cluster&#10;público (public_access_cidrs restrito) + privado" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDE8EA;strokeColor=#DD344C;fontColor=#1A1A1A;" vertex="1" parent="1">
+          <mxGeometry x="370" y="205" width="540" height="55" as="geometry" />
+        </mxCell>
+
+        <mxCell id="nsargo" value="namespace argocd (pods em nós privados)" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;align=left;spacingLeft=8;fillColor=#FFF1E0;strokeColor=#ED7100;fontColor=#1A1A1A;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="370" y="275" width="540" height="290" as="geometry" />
+        </mxCell>
+
+        <mxCell id="app" value="Application: dvn-workshop&#10;(extraObjects do release argo-cd)&#10;repoURL HTTPS público, sem credencial" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF1E0;strokeColor=#ED7100;fontColor=#1A1A1A;" vertex="1" parent="1">
+          <mxGeometry x="530" y="300" width="360" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="repos" value="argocd-repo-server&#10;(render Kustomize)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF1E0;strokeColor=#ED7100;fontColor=#1A1A1A;" vertex="1" parent="1">
+          <mxGeometry x="390" y="400" width="170" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="ctrl" value="argocd-application-controller" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF1E0;strokeColor=#ED7100;fontColor=#1A1A1A;" vertex="1" parent="1">
+          <mxGeometry x="620" y="400" width="190" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="server" value="argocd-server&#10;Service ClusterIP" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF1E0;strokeColor=#ED7100;fontColor=#1A1A1A;" vertex="1" parent="1">
+          <mxGeometry x="390" y="490" width="170" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="redis" value="argocd-redis" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF1E0;strokeColor=#ED7100;fontColor=#1A1A1A;" vertex="1" parent="1">
+          <mxGeometry x="620" y="490" width="190" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="nsapp" value="namespace dvn-workshop (pods em nós privados)" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;align=left;spacingLeft=8;fillColor=#FFF1E0;strokeColor=#ED7100;fontColor=#1A1A1A;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="370" y="585" width="540" height="135" as="geometry" />
+        </mxCell>
+        <mxCell id="fe" value="frontend&#10;Deployment + Service + PDB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF1E0;strokeColor=#ED7100;fontColor=#1A1A1A;" vertex="1" parent="1">
+          <mxGeometry x="390" y="620" width="230" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="be" value="backend&#10;Deployment + Service + PDB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF1E0;strokeColor=#ED7100;fontColor=#1A1A1A;" vertex="1" parent="1">
+          <mxGeometry x="650" y="620" width="240" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ecr" value="ECR&#10;dvn-workshop/production/{frontend,backend}" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EAF7E0;strokeColor=#7AA116;fontColor=#1A1A1A;" vertex="1" parent="1">
+          <mxGeometry x="990" y="620" width="150" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="noderole" value="IAM Role do node group&#10;prd-eks-node-role-us-east-1&#10;(ECR ReadOnly — image pull)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDE8EA;strokeColor=#DD344C;fontColor=#1A1A1A;" vertex="1" parent="1">
+          <mxGeometry x="990" y="480" width="150" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e-tf-api" value="helm install/upgrade" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;fontColor=#1A1A1A;" edge="1" parent="1" source="tf" target="api">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-api-server" value="cria/atualiza objetos" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;fontColor=#1A1A1A;" edge="1" parent="1" source="api" target="server">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-api-app" value="cria a Application (extraObjects)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;fontColor=#1A1A1A;" edge="1" parent="1" source="api" target="app">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-op-api" value="kubectl port-forward 8080:443" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;fontColor=#1A1A1A;" edge="1" parent="1" source="op" target="api">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-repos-nat" value="git fetch HTTPS anônimo (polling ~3 min)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;fontColor=#1A1A1A;" edge="1" parent="1" source="repos" target="nat">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-nat-repo" value="HTTPS / 443" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;fontColor=#1A1A1A;" edge="1" parent="1" source="nat" target="repo">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-repos-ctrl" value="manifests renderizados" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;fontColor=#1A1A1A;" edge="1" parent="1" source="repos" target="ctrl">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-ctrl-app" value="reconcilia" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#545B64;strokeWidth=1;dashed=1;fontColor=#1A1A1A;" edge="1" parent="1" source="ctrl" target="app">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-ctrl-fe" value="apply / prune / selfHeal" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;fontColor=#1A1A1A;" edge="1" parent="1" source="ctrl" target="fe">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-ctrl-be" value="apply / prune / selfHeal" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;fontColor=#1A1A1A;" edge="1" parent="1" source="ctrl" target="be">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-fe-ecr" value="image pull" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;fontColor=#1A1A1A;" edge="1" parent="1" source="fe" target="ecr">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-be-ecr" value="image pull" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;fontColor=#1A1A1A;" edge="1" parent="1" source="be" target="ecr">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-noderole-ecr" value="autoriza pull" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#545B64;strokeWidth=1;dashed=1;fontColor=#1A1A1A;" edge="1" parent="1" source="noderole" target="ecr">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-ctrl-redis" value="cache de estado" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;fontColor=#1A1A1A;" edge="1" parent="1" source="ctrl" target="redis">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-server-redis" value="consulta" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;fontColor=#1A1A1A;" edge="1" parent="1" source="server" target="redis">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -1,0 +1,91 @@
+<mxfile host="app.diagrams.net" agent="aws-architect-agent" version="24.7.17" type="device">
+  <diagram name="Arquitetura" id="adr-0007-arquitetura">
+    <mxGraphModel dx="1422" dy="762" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="826" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="title" value="ADR-0007 — Workflows GitHub Actions: build e push das imagens no ECR (us-east-1)" style="text;html=1;align=left;verticalAlign=middle;fontSize=14;fontStyle=1;fontColor=#1A1A1A;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="820" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="dev" value="Desenvolvedor&#10;push em main" style="ellipse;whiteSpace=wrap;html=1;fillColor=#F2F2F2;strokeColor=#545B64;fontColor=#1A1A1A;" vertex="1" parent="1">
+          <mxGeometry x="40" y="280" width="150" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="gh" value="GitHub — repositório PÚBLICO (janela do lab)&#10;workshop-devops-na-nuvem&#10;runner padrão: minutos ilimitados" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F2F2F2;strokeColor=#545B64;fontColor=#1A1A1A;" vertex="1" parent="1">
+          <mxGeometry x="220" y="270" width="220" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="wff" value="Workflow frontend-image.yml&#10;paths: dvn-workshop-apps/frontend/**" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F2F2F2;strokeColor=#545B64;fontColor=#1A1A1A;" vertex="1" parent="1">
+          <mxGeometry x="220" y="150" width="220" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="wfb" value="Workflow backend-image.yml&#10;paths: dvn-workshop-apps/backend/**" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F2F2F2;strokeColor=#545B64;fontColor=#1A1A1A;" vertex="1" parent="1">
+          <mxGeometry x="220" y="400" width="220" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="runner" value="Job build (ubuntu-latest)&#10;checkout → tag sha-xxxxxxx&#10;buildx + cache gha → push" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF1E0;strokeColor=#ED7100;fontColor=#1A1A1A;" vertex="1" parent="1">
+          <mxGeometry x="510" y="270" width="220" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="role" value="IAM Role (ADR-0005)&#10;prd-github-oidc-ecr-role-us-east-1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDE8EA;strokeColor=#DD344C;fontColor=#1A1A1A;" vertex="1" parent="1">
+          <mxGeometry x="500" y="130" width="240" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ecrf" value="ECR dvn-workshop/production/frontend&#10;tag sha-xxxxxxx (imutável)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EAF7E0;strokeColor=#7AA116;fontColor=#1A1A1A;" vertex="1" parent="1">
+          <mxGeometry x="820" y="180" width="270" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ecrb" value="ECR dvn-workshop/production/backend&#10;tag sha-xxxxxxx (imutável)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EAF7E0;strokeColor=#7AA116;fontColor=#1A1A1A;" vertex="1" parent="1">
+          <mxGeometry x="820" y="280" width="270" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="scan" value="ECR scan on push&#10;(informativo, sem gate)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EAF7E0;strokeColor=#7AA116;fontColor=#1A1A1A;" vertex="1" parent="1">
+          <mxGeometry x="820" y="400" width="270" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="next" value="Job update-manifest (ADR-0008)&#10;needs: build" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F2F2F2;strokeColor=#545B64;fontColor=#1A1A1A;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="510" y="430" width="220" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e-dev-gh" value="commit" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;fontColor=#1A1A1A;" edge="1" parent="1" source="dev" target="gh">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-gh-wff" value="path filter" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;fontColor=#1A1A1A;" edge="1" parent="1" source="gh" target="wff">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-gh-wfb" value="path filter" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;fontColor=#1A1A1A;" edge="1" parent="1" source="gh" target="wfb">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-wff-runner" value="dispara" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;fontColor=#1A1A1A;" edge="1" parent="1" source="wff" target="runner">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-wfb-runner" value="dispara" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;fontColor=#1A1A1A;" edge="1" parent="1" source="wfb" target="runner">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-runner-role" value="AssumeRoleWithWebIdentity (OIDC)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;fontColor=#1A1A1A;" edge="1" parent="1" source="runner" target="role">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-role-runner" value="credenciais temporárias" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;fontColor=#1A1A1A;exitX=0.75;exitY=1;exitDx=0;exitDy=0;entryX=0.75;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="role" target="runner">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-runner-ecrf" value="docker push" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;fontColor=#1A1A1A;" edge="1" parent="1" source="runner" target="ecrf">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-runner-ecrb" value="docker push" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;fontColor=#1A1A1A;" edge="1" parent="1" source="runner" target="ecrb">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-ecrf-scan" value="scan" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;fontColor=#1A1A1A;" edge="1" parent="1" source="ecrf" target="scan">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-ecrb-scan" value="scan" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;fontColor=#1A1A1A;" edge="1" parent="1" source="ecrb" target="scan">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-runner-next" value="outputs: image_tag / image_uri" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1a73e8;strokeWidth=2;flowAnimation=1;fontColor=#1A1A1A;" edge="1" parent="1" source="runner" target="next">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
