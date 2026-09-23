@@ -14,9 +14,9 @@ resources:
 images:
 - name: backend
   newName: 659942169599.dkr.ecr.us-east-1.amazonaws.com/dvn-workshop/production/backend
-  newTag: v1.0
+  newTag: sha-d7de3a4
 
 labels:
 - includeTemplates: true
   pairs:
-    app.kubernetes.io/version: v1.0
+    app.kubernetes.io/version: sha-d7de3a4
